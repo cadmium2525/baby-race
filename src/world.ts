@@ -268,7 +268,11 @@ export class GameWorld {
   update(state: RaceState, elapsed: number, dt: number, cinematic?: CinematicFrame | null) {
     if (state.courseId !== this.courseId) this.buildCourse(state.courseId); const intro = state.phase === 'ready'; const mobile = this.width < 760;
     state.babies.forEach((b, i) => {
-      const rig = this.babies[i]; if (!rig) return; this.applyStyle(i, b.style); rig.root.visible = true; rig.root.scale.setScalar(intro && mobile ? 1.48 : 1.16);
+      const rig = this.babies[i]; if (!rig) return; this.applyStyle(i, b.style);
+      // Keep nearby racers from covering the featured face during a closeup.
+      // Restore everyone before the camera finishes returning to the race.
+      rig.root.visible = !cinematic || cinematic.babyId === b.id || cinematic.amount <= .035;
+      rig.root.scale.setScalar(intro && mobile ? 1.48 : 1.16);
       const preview = cinematic?.babyId === i ? cinematic : undefined;
       rig.root.position.set(intro ? (i % 2 ? 3 : 0) : b.x, .04, intro ? 13 - Math.floor(i / 2) * 4 - i % 2 : b.z); rig.root.rotation.set(0, intro ? -2.65 + Math.sin(elapsed * .5 + i) * .08 : -b.heading, 0); this.animateBaby(rig, b, elapsed + (preview?.elapsed ?? 0), intro, preview);
       const r = this.rattles[i]; const rattle = state.rattles[i]; r.root.visible = !intro && state.phase !== 'finished' && !cinematic; r.root.position.set(rattle.x, .85 + Math.sin(elapsed * 3 + i) * .06, rattle.z);

@@ -52,7 +52,7 @@ interface Runtime {
   distraction: { x: number; z: number }[]; targetBaby: (number | null)[]; effectElapsed: number[];
   superUntil: number[]; cpuRing: number[]; cpuSuper: number[]; zoneIndex: number[];
   rareCursor: number; rareCount: number; nextRare: number; legendaryCursor: number; nextLegendary: number;
-  pendingFinishPose: boolean;
+  pendingFinishPose: boolean; rareWaiting: boolean; legendaryWaiting: boolean;
 }
 // Rendering cannot consume random draws or advance AI clocks.
 const runtimes = new WeakMap<RaceState, Runtime>();
@@ -96,16 +96,19 @@ export function createRace(mode: Mode = 'normal', seed = 20261022, options: Race
     nextGroove: babies.map((_, id) => 3 + id), nextBored: all(0),
     distraction: babies.map(b => ({ x: b.x, z: b.z })), targetBaby: babies.map(() => null), effectElapsed: all(0),
     superUntil: all(-1), cpuRing: babies.map((_, id) => 0.2 + id * 0.12), cpuSuper: all(0), zoneIndex: all(-1),
-    rareCursor: 0, rareCount: 0, nextRare: 16, legendaryCursor: 0, nextLegendary: Infinity, pendingFinishPose: false,
+    rareCursor: 0, rareCount: 0, nextRare: 16, legendaryCursor: 0, nextLegendary: Infinity,
+    pendingFinishPose: false, rareWaiting: false, legendaryWaiting: false,
   };
   rt.normalCursor = babies.map(() => Math.floor(random(rt) * NORMAL_EVENTS.length));
   rt.cpuSuper = babies.map((_, id) => 25 + id + random(rt) * 7);
   rt.rareCursor = Math.floor(random(rt) * RARE_EVENTS.length);
   rt.legendaryCursor = Math.floor(random(rt) * LEGENDARY_EVENTS.length);
-  if (mode !== 'skill') rt.nextNormal = babies.map(() => (mode === 'chaos' ? 3 : 4) + random(rt) * 2);
-  rt.nextRare = mode === 'chaos' ? 6 + random(rt) * 2 : mode === 'normal' ? 9 + random(rt) * 3 : 16 + random(rt) * 3;
-  if (mode === 'chaos') rt.nextLegendary = 8 + random(rt) * 3;
-  else if (mode === 'normal' && random(rt) < 0.5) rt.nextLegendary = 18 + random(rt) * 10;
+  // Normal inherits the former chaos schedule, including its seeded draw order.
+  // Chaos requests more events; the shared per-baby guards still decide whether
+  // a participant can safely receive them.
+  if (mode !== 'skill') rt.nextNormal = babies.map(() => (mode === 'chaos' ? 2 : 3) + random(rt) * 2);
+  rt.nextRare = mode === 'chaos' ? 4 + random(rt) * 2 : mode === 'normal' ? 6 + random(rt) * 2 : 16 + random(rt) * 3;
+  if (mode !== 'skill') rt.nextLegendary = mode === 'chaos' ? 6 + random(rt) * 2 : 8 + random(rt) * 3;
   runtimes.set(state, rt);
   return state;
 }
@@ -280,30 +283,55 @@ function updateCpu(state: RaceState, dt: number): void {
   }
 }
 function updateSchedules(state: RaceState): void {
+  if (state.mode === 'chaos') {
+    // With a short ordinary interval, evaluating minor setbacks first can take
+    // every newly available participant and starve a waiting rare spectacle.
+    updateLegendarySchedule(state);
+    updateRareSchedule(state);
+    updateOrdinarySchedules(state);
+  } else {
+    // Preserve the former chaos ordering and seeded outcomes for normal mode.
+    updateOrdinarySchedules(state);
+    updateRareSchedule(state);
+    updateLegendarySchedule(state);
+  }
+}
+function updateOrdinarySchedules(state: RaceState): void {
   const rt = runtime(state);
+  // Keep the next free participant available between the spectacle scheduler's
+  // retries instead of immediately spending their protection window on a minor
+  // setback. All cooldowns still apply to the waiting effect itself.
+  if (state.mode === 'chaos' && (rt.rareWaiting || rt.legendaryWaiting)) return;
   for (const baby of state.babies) {
     if (baby.finishedAt !== null || state.time < rt.nextNormal[baby.id]) continue;
     const eventId = NORMAL_EVENTS[rt.normalCursor[baby.id] % NORMAL_EVENTS.length];
     if (triggerEvent(state, eventId, baby.id)) {
       rt.normalCursor[baby.id] += 1;
-      const interval = state.mode === 'chaos' ? 7 + random(rt) * 3 : state.mode === 'normal' ? 10 + random(rt) * 3 : 14 + random(rt) * 4;
+      const interval = state.mode === 'chaos' ? 4 + random(rt) * 2 : state.mode === 'normal' ? 7 + random(rt) * 3 : 14 + random(rt) * 4;
       rt.nextNormal[baby.id] = state.time + interval;
     } else rt.nextNormal[baby.id] = state.time + 0.8;
   }
+}
+function updateRareSchedule(state: RaceState): void {
+  const rt = runtime(state);
   if (state.time >= rt.nextRare) {
     const eventId = RARE_EVENTS[rt.rareCursor % RARE_EVENTS.length];
     const choices = scheduledChoices(state, eventId);
     const baby = choices[Math.floor(random(rt) * choices.length)];
     if (baby && triggerEvent(state, eventId, baby.id)) {
+      rt.rareWaiting = false;
       rt.rareCursor += 1; rt.rareCount += 1;
-      const cap = state.mode === 'chaos' ? 6 : state.mode === 'normal' ? 3 : 2;
-      const interval = state.mode === 'chaos' ? 7 + random(rt) * 3 : state.mode === 'normal' ? 12 + random(rt) * 4 : 18 + random(rt) * 3;
+      const cap = state.mode === 'chaos' ? 10 : state.mode === 'normal' ? 6 : 2;
+      const interval = state.mode === 'chaos' ? 4 + random(rt) * 2 : state.mode === 'normal' ? 7 + random(rt) * 3 : 18 + random(rt) * 3;
       rt.nextRare = rt.rareCount >= cap ? Infinity : state.time + interval;
-    } else rt.nextRare = state.time + 0.8;
+    } else { rt.rareWaiting = true; rt.nextRare = state.time + 0.8; }
   }
+}
+function updateLegendarySchedule(state: RaceState): void {
+  const rt = runtime(state);
   if (state.time >= rt.nextLegendary) {
     // A finish-line pose must not block every other legendary event early in a
-    // race. Defer it to a later chaos slot and show an eligible effect now.
+    // race. Defer it to a later legendary slot and show an eligible effect now.
     const deferredChoices = rt.pendingFinishPose ? scheduledChoices(state, 'S08') : [];
     const servingDeferred = deferredChoices.length > 0;
     let eventId = servingDeferred ? 'S08' as EventId : LEGENDARY_EVENTS[rt.legendaryCursor % LEGENDARY_EVENTS.length];
@@ -316,10 +344,11 @@ function updateSchedules(state: RaceState): void {
     }
     const baby = choices[Math.floor(random(rt) * choices.length)];
     if (baby && triggerEvent(state, eventId, baby.id)) {
+      rt.legendaryWaiting = false;
       if (!servingDeferred) rt.legendaryCursor += 1;
       if (eventId === 'S08') rt.pendingFinishPose = false;
-      rt.nextLegendary = state.mode === 'chaos' ? state.time + 14 + random(rt) * 4 : Infinity;
-    } else rt.nextLegendary = state.time + 0.8;
+      rt.nextLegendary = state.mode === 'chaos' ? state.time + 9 + random(rt) * 3 : state.mode === 'normal' ? state.time + 14 + random(rt) * 4 : Infinity;
+    } else { rt.legendaryWaiting = true; rt.nextLegendary = state.time + 0.8; }
   }
 }
 function scheduledChoices(state: RaceState, eventId: EventId): Baby[] {

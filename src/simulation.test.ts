@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import {
   BASE_SPEED, COURSE_HALF_WIDTH, GOAL_Z, START_Z, TIME_LIMIT,
@@ -197,7 +198,6 @@ test('all three CPUs guide independently, reach the finish, and remain in bounds
   for (const baby of state.babies.slice(1)) {
     assert.ok(getProgress(baby) > 0.06);
     assert.notEqual(state.rattles[baby.id].z, initialTargets[baby.id].z);
-    assert.ok(baby.attention > 0.4 || baby.eventId === 'N05');
   }
   assert.deepEqual(state.rattles[0], initialTargets[0]);
   updateRace(state, 60);
@@ -443,8 +443,7 @@ test('every catalog event can be reached through seeded natural race schedules',
   assert.deepEqual([...encountered].sort(), EVENTS.map(event => event.id).sort());
 });
 
-test('normal races cap rare schedules at three and legendary schedules at one; skill never schedules legendary', () => {
-  let racesWithLegendary = 0;
+test('normal races allow six rares and repeating legendary events; skill excludes legendary', () => {
   for (let seed = 0; seed < 32; seed++) {
     const state = racing('normal', seed);
     const rareOccurrences = new Set<string>(), legendaryOccurrences = new Set<string>();
@@ -455,11 +454,9 @@ test('normal races cap rare schedules at three and legendary schedules at one; s
         if (event.eventId?.startsWith('S')) legendaryOccurrences.add(`${event.eventId}:${event.time}`);
       }
     }
-    assert.ok(rareOccurrences.size >= 2 && rareOccurrences.size <= 3);
-    assert.ok(legendaryOccurrences.size <= 1);
-    if (legendaryOccurrences.size) racesWithLegendary++;
+    assert.ok(rareOccurrences.size >= 3 && rareOccurrences.size <= 6);
+    assert.ok(legendaryOccurrences.size >= 2);
   }
-  assert.ok(racesWithLegendary >= 8 && racesWithLegendary <= 24);
   const skill = racing('skill', 4);
   while (skill.phase === 'racing') {
     updateRace(skill, 0.5);
@@ -467,32 +464,63 @@ test('normal races cap rare schedules at three and legendary schedules at one; s
   }
 });
 
-function collectRace(mode: Mode, seed: number): { state: RaceState; notifications: RaceState['events'] } {
+function collectRace(mode: Mode, seed: number): { state: RaceState; notifications: RaceState['events']; stationaryFraction: number } {
   const state = racing(mode, seed);
   const seen = new Set<number>();
   const notifications: RaceState['events'] = [];
-  let lastCall = -1;
+  let lastCall = -1, stationaryTime = 0;
   while (state.phase === 'racing') {
     const baby = state.babies[0];
     moveRattle(state, baby.x, baby.z - 3);
     const second = Math.floor(state.time + 1e-7);
     if (second !== lastCall) { ringRattle(state); lastCall = second; }
+    const before = state.babies.map(baby => ({ x: baby.x, z: baby.z }));
+    const previousTime = state.time;
     updateRace(state, 0.25);
+    for (const baby of state.babies) {
+      if (Math.hypot(baby.x - before[baby.id].x, baby.z - before[baby.id].z) < 0.001) stationaryTime += state.time - previousTime;
+    }
     for (const event of state.events) if (!seen.has(event.id)) {
       seen.add(event.id);
       notifications.push(event);
     }
   }
-  return { state, notifications: notifications.sort((a, b) => a.id - b.id) };
+  return { state, notifications: notifications.sort((a, b) => a.id - b.id), stationaryFraction: stationaryTime / (4 * state.time) };
 }
+
+// Captured from chaos before its promotion; each digest covers the final state
+// and ordered event log, excluding only the mode label.
+const PREVIOUS_CHAOS_DIGESTS = [
+  'daf7ad0af636dec2', 'e4ab4bfbed91458c', 'af6c96ab171354ed', '496c19f6c0fb7f68',
+  '98efca2179ae98e5', 'f31e8ea17713ca7e', '0c2aeab00b4c90b6', '2632dd37524902ad',
+  'fd3e14a61bf694c7', '321c17d50975af0b', '3a4fdfb598aba524', '27996651c93d55a8',
+  'fdf3098062d48026', '8dccf33bb14b823d', '25f894fe3758d80a', 'ec35ca7156b8cc10',
+  'c9fb32639db2222d', 'c02e97374479411d', '41167b32a3d76124', '9219286bf4a12a89',
+  'a192a6fbca69c896', '23db4504d6722825', '17bb9be2fd5f4fa2', 'b9c3f2504399e523',
+  '85f61b84dd782138', 'd34bfd9c0a5105b6', 'c7079c34d623cc87', '2c60c0befff32018',
+  'eb4e6d8fe5d712d2', 'f4c34dd78ece3f49', '73a75ca94ae9d70a', '47f8da3e833836c2',
+];
+
+test('normal preserves the previous chaos outcomes for the same 32 seeds and inputs', () => {
+  for (let seed = 0; seed < PREVIOUS_CHAOS_DIGESTS.length; seed++) {
+    const { state, notifications } = collectRace('normal', seed);
+    const modeIndependent = Object.fromEntries(Object.entries(state).filter(([key]) => key !== 'mode'));
+    const digest = createHash('sha256').update(JSON.stringify({
+      state: modeIndependent, events: notifications.filter(event => event.eventId),
+    })).digest('hex').slice(0, 16);
+    assert.equal(digest, PREVIOUS_CHAOS_DIGESTS[seed], 'legacy chaos parity for seed ' + seed);
+  }
+});
 
 test('normal accidents arrive in the opening seconds and remain lively, while chaos is busier', () => {
   let normalOrdinary = 0, normalHuman = 0, normalRare = 0, chaosOrdinary = 0, chaosRare = 0;
+  let normalLegendary = 0, chaosLegendary = 0;
+  let chaosStationary = 0;
   let normalLegendaryRaces = 0;
   const negative = new Set<EventId>(['N01','N02','N03','N04','N05','N06','N07','N08','R03','R05','R06','R07','S05','S08']);
   for (let seed = 0; seed < 32; seed++) {
     for (const mode of ['normal', 'chaos'] as const) {
-      const { state, notifications } = collectRace(mode, seed);
+      const { state, notifications, stationaryFraction } = collectRace(mode, seed);
       const ordinary = notifications.filter(event => event.eventId?.startsWith('N'));
       const occurrences = (prefix: string) => [...new Map(notifications.filter(event => event.eventId?.startsWith(prefix))
         .map(event => [`${event.eventId}:${event.time}`, event])).values()];
@@ -501,40 +529,51 @@ test('normal accidents arrive in the opening seconds and remain lively, while ch
       assert.ok(state.time > 30 && state.time < TIME_LIMIT);
       const firstHuman = ordinary.find(event => event.babyId === 0)!;
       if (mode === 'normal') {
-        assert.ok(firstHuman.time >= 4 && firstHuman.time < 6.05);
-        assert.ok(rare[0].time >= 9 && rare[0].time < 14);
-        assert.ok(rare.length >= 2 && rare.length <= 3);
-        assert.ok(legendary.length <= 1);
+        assert.ok(firstHuman.time >= 3 && firstHuman.time < 5.05);
+        assert.ok(rare[0].time >= 6 && rare[0].time < 12);
+        assert.ok(rare.length >= 3 && rare.length <= 6);
+        assert.ok(legendary.length >= 2);
         if (legendary.length) {
           normalLegendaryRaces++;
-          assert.ok(legendary[0].time >= 18 && legendary[0].time < 30);
+          assert.ok(legendary[0].time >= 8 && legendary[0].time < 13);
         }
         normalOrdinary += ordinary.length;
         normalHuman += ordinary.filter(event => event.babyId === 0).length;
         normalRare += rare.length;
+        normalLegendary += legendary.length;
       } else {
-        assert.ok(firstHuman.time >= 3 && firstHuman.time < 5.05);
-        assert.ok(rare[0].time >= 6 && rare[0].time < 12);
-        assert.ok(rare.length >= 3 && rare.length <= 6);
+        assert.ok(firstHuman.time >= 2 && firstHuman.time < 4.05);
+        // Protection may defer a requested negative event until a baby is free.
+        assert.ok(rare[0].time >= 4 && rare[0].time < 11);
+        assert.ok(rare.length >= 4 && rare.length <= 10);
         // An early S08 selection must not postpone every legendary until the goal.
-        assert.ok(legendary[0].time >= 8 && legendary[0].time < 13);
-        assert.ok(legendary.length >= 2);
+        assert.ok(legendary[0].time >= 6 && legendary[0].time < 11);
+        assert.ok(legendary.length >= 3);
         chaosOrdinary += ordinary.length;
         chaosRare += rare.length;
+        chaosLegendary += legendary.length;
+        chaosStationary += stationaryFraction;
+        assert.ok(stationaryFraction < 0.15);
       }
       // All affected participants get the same protection, including contagion.
       for (let id = 0; id < 4; id++) {
         const setbacks = notifications.filter(event => event.babyId === id && event.eventId && negative.has(event.eventId));
         for (let i = 1; i < setbacks.length; i++) assert.ok(setbacks[i].time - setbacks[i - 1].time >= 7 - 1e-8);
+        const specials = notifications.filter(event => event.babyId === id && event.eventId?.startsWith('S'));
+        for (let i = 1; i < specials.length; i++) assert.ok(specials[i].time - specials[i - 1].time >= 14 - 1e-8);
       }
     }
   }
-  assert.ok(normalHuman / 32 >= 3);
-  assert.ok(normalOrdinary / 32 >= 12);
-  assert.ok(normalRare / 32 >= 2.25);
-  assert.ok(normalLegendaryRaces >= 8 && normalLegendaryRaces <= 24);
-  assert.ok(chaosOrdinary > normalOrdinary * 1.15);
-  assert.ok(chaosRare > normalRare * 1.25);
+  assert.ok(normalHuman / 32 >= 3.5);
+  assert.ok(normalOrdinary / 32 >= 15);
+  assert.ok(normalRare / 32 >= 3.5);
+  assert.equal(normalLegendaryRaces, 32);
+  // Minor setbacks share protection with spectacles. Verify more spectacles
+  // and more events overall without demanding extra forced interruptions.
+  assert.ok(chaosOrdinary >= normalOrdinary * 0.9);
+  assert.ok(chaosRare + chaosLegendary > (normalRare + normalLegendary) * 1.4);
+  assert.ok(chaosOrdinary + chaosRare + chaosLegendary > (normalOrdinary + normalRare + normalLegendary) * 1.1);
+  assert.ok(chaosStationary / 32 < 0.1);
 });
 
 test('notification history retains 24 entries including simultaneous rare contagion', () => {

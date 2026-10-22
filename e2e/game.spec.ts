@@ -12,7 +12,7 @@ type Snapshot = {
   cinematic: null | { babyId: number; eventId: string; elapsed: number; duration: number; amount: number; phase: 'enter' | 'hold' | 'exit' };
   camera: { viewHeight: number; x: number; y: number; z: number };
 };
-type CameraSample = { time: number; paused: boolean; cinematic: boolean; camera: Snapshot['camera'] };
+type CameraSample = { time: number; paused: boolean; cinematic: boolean; eventId: string | null; camera: Snapshot['camera'] };
 const snapshot = (page: Page) => page.evaluate(() => (window as unknown as { __babyRace: Snapshot }).__babyRace);
 const openGame = async (page: Page) => {
   // Decorative fonts must not make gameplay tests depend on Google's network.
@@ -42,7 +42,7 @@ const observeCamera = async (page: Page) => page.addInitScript(() => {
   const record = () => {
     const state = scope.__babyRace;
     if (state?.camera && state.phase === 'racing') scope.__testCameraFrames.push({
-      time: state.time, paused: state.paused, cinematic: state.cinematic !== null, camera: { ...state.camera },
+      time: state.time, paused: state.paused, cinematic: state.cinematic !== null, eventId: state.cinematic?.eventId ?? null, camera: { ...state.camera },
     });
     if (scope.__testCameraFrames.length > 6000) scope.__testCameraFrames.shift();
     requestAnimationFrame(record);
@@ -150,11 +150,24 @@ test('normal race shows early frozen closeups, resumes smoothly, finishes and re
   expect(exiting.cinematic!.amount).toBeGreaterThan(0);
   expect(frozenValues(exiting)).toEqual(frozenValues(shot));
   await expect.poll(async () => (await snapshot(page)).cinematic, { timeout: 10_000 }).toBeNull();
-  await expect.poll(async () => (await snapshot(page)).time).toBeGreaterThan(shot.time);
+  await expect.poll(async () => {
+    const state = await snapshot(page);
+    return state.cinematic === null && state.time > shot.time;
+  }).toBe(true);
   await page.locator('#super-button').click();
   expect((await snapshot(page)).babies[0].superUsed).toBe(true);
   await expect(page.locator('#super-button')).toBeDisabled();
-  await expect(page.locator('#result')).toBeVisible({ timeout: 180_000 });
+  let capturedNormalLegendary = false;
+  await expect.poll(async () => {
+    const state = await snapshot(page);
+    if (!capturedNormalLegendary && state.cinematic?.eventId.startsWith('S') && state.cinematic.phase === 'hold') {
+      await page.screenshot({ path: 'test-results/normal-legendary-desktop.png' });
+      capturedNormalLegendary = true;
+    }
+    return state.phase;
+  }, { timeout: 180_000, intervals: [150] }).toBe('finished');
+  await expect(page.locator('#result')).toBeVisible();
+  expect(capturedNormalLegendary).toBe(true);
   const finished = await snapshot(page);
   expect(finished.winner).not.toBeNull();
   expect(finished.discovered.length).toBeGreaterThan(0);
@@ -166,7 +179,15 @@ test('normal race shows early frozen closeups, resumes smoothly, finishes and re
     return [{ time: frame.time, before: previous.camera.viewHeight, after: frame.camera.viewHeight,
       relative: Math.abs(frame.camera.viewHeight - previous.camera.viewHeight) / previous.camera.viewHeight }];
   });
-  await writeFile('test-results/camera-continuity.json', JSON.stringify({ cameraSteps, cameraFrames }, null, 2));
+  const seenShots = new Set<string>();
+  const eventOccurrences = cameraFrames.flatMap(frame => {
+    if (!frame.eventId) return [];
+    const key = `${frame.eventId}:${frame.time}`;
+    if (seenShots.has(key)) return [];
+    seenShots.add(key);
+    return [{ time: frame.time, eventId: frame.eventId }];
+  });
+  await writeFile('test-results/camera-continuity.json', JSON.stringify({ cameraSteps, cameraFrames, eventOccurrences }, null, 2));
   expect(cameraSteps.length).toBeGreaterThan(10);
   expect(Math.max(...cameraSteps.map(step => step.relative))).toBeLessThan(.06);
   await page.screenshot({ path: 'test-results/result-desktop.png' });
