@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
+import { EVENTS } from '../src/content';
 
 type Snapshot = {
   phase: string; paused: boolean; time: number; winner: number | null;
@@ -93,8 +94,8 @@ test('normal race shows early frozen closeups, resumes smoothly, finishes and re
   expect(initial.babies.filter(baby => baby.isCpu)).toHaveLength(3);
   await page.screenshot({ path: 'test-results/title-desktop.png' });
   await page.locator('#catalog-button').click();
-  await expect(page.locator('.event-entry')).toHaveCount(24);
-  await expect(page.locator('.event-entry.undiscovered')).toHaveCount(24);
+  await expect(page.locator('.event-entry')).toHaveCount(EVENTS.length);
+  await expect(page.locator('.event-entry.undiscovered')).toHaveCount(EVENTS.length);
   await page.locator('#catalog-close').click();
   await page.locator('[data-mode="normal"]').click();
   await page.locator('#help-button').click();

@@ -10,6 +10,7 @@ export interface CinematicFrame {
   readonly phase: 'enter' | 'hold' | 'exit';
 }
 export const CINEMATIC_TIMING = { enter: 0.45, exit: 0.55, rare: 2.6, legendary: 3.2 } as const;
+const EVENT_DURATION: Partial<Record<EventId, number>> = { R09: 4.2, R10: 3.6, S09: 4.6 };
 interface Shot { babyId: number; eventId: EventId; elapsed: number; duration: number }
 const smooth = (t: number) => { const x = Math.max(0, Math.min(1, t)); return x * x * (3 - 2 * x); };
 
@@ -42,7 +43,7 @@ export class CinematicDirector {
       const key = `${eventId}:${event.time}`;
       if (this.seenOccurrences.has(key)) continue;
       this.seenOccurrences.add(key);
-      const shot: Shot = { babyId: event.babyId, eventId, elapsed: 0, duration: eventId.startsWith('S') ? CINEMATIC_TIMING.legendary : CINEMATIC_TIMING.rare };
+      const shot: Shot = { babyId: event.babyId, eventId, elapsed: 0, duration: EVENT_DURATION[eventId] ?? (eventId.startsWith('S') ? CINEMATIC_TIMING.legendary : CINEMATIC_TIMING.rare) };
       if (!this.current) this.current = shot;
       else if (this.queued.length < 3) this.queued.push(shot);
     }

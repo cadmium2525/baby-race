@@ -43,7 +43,7 @@ const LANES = [-3.9, -1.3, 1.3, 3.9];
 const NORMAL_EVENTS = EVENTS.filter(e => e.rarity === 'normal').map(e => e.id);
 const RARE_EVENTS = EVENTS.filter(e => e.rarity === 'rare').map(e => e.id);
 const LEGENDARY_EVENTS = EVENTS.filter(e => e.rarity === 'legendary').map(e => e.id);
-const NEGATIVE = new Set<EventId>(['N01','N02','N03','N04','N05','N06','N07','N08','R03','R05','R06','R07','S05','S08']);
+const NEGATIVE = new Set<EventId>(['N01','N02','N03','N04','N05','N06','N07','N08','R03','R05','R06','R07','R09','R10','S05','S08','S09']);
 interface Runtime {
   rng: number; accumulator: number; clock: number; notificationId: number;
   lastRing: number[]; lastAcceptedRing: number[]; lastNegative: number[];
@@ -103,7 +103,7 @@ export function createRace(mode: Mode = 'normal', seed = 20261022, options: Race
   rt.cpuSuper = babies.map((_, id) => 25 + id + random(rt) * 7);
   rt.rareCursor = Math.floor(random(rt) * RARE_EVENTS.length);
   rt.legendaryCursor = Math.floor(random(rt) * LEGENDARY_EVENTS.length);
-  // Normal inherits the former chaos schedule, including its seeded draw order.
+  // Normal retains the former chaos cadence as the event catalog grows.
   // Chaos requests more events; the shared per-baby guards still decide whether
   // a participant can safely receive them.
   if (mode !== 'skill') rt.nextNormal = babies.map(() => (mode === 'chaos' ? 2 : 3) + random(rt) * 2);
@@ -192,12 +192,15 @@ function nearestRival(state: RaceState, baby: Baby): Baby | undefined {
 }
 function applyEffect(state: RaceState, baby: Baby, eventId: EventId, value: BabyState, duration: number): void {
   const rt = runtime(state);
-  const seconds = NEGATIVE.has(eventId) && baby.z < GOAL_Z + 4 ? Math.min(duration, 0.65) : duration;
+  // The dance has two seconds of movement after its stop; shorten only the
+  // stationary part near the goal, preserving the promised dash.
+  const finishLimit = eventId === 'S09' ? 2 + 0.65 : 0.65;
+  const seconds = NEGATIVE.has(eventId) && baby.z < GOAL_Z + 4 ? Math.min(duration, finishLimit) : duration;
   setState(baby, value, seconds); baby.eventId = eventId;
   rt.effectElapsed[baby.id] = 0; rt.targetBaby[baby.id] = null; rt.eventReady[baby.id] = state.time + seconds + 1.5;
   if (NEGATIVE.has(eventId)) rt.lastNegative[baby.id] = state.time;
   if (eventId.startsWith('S')) {
-    baby.awakeningPhase = eventId === 'S01' ? 'pose' : 'run';
+    baby.awakeningPhase = eventId === 'S01' || eventId === 'S09' ? 'pose' : 'run';
     rt.specialReady[baby.id] = state.time + seconds + 14;
   }
 }
@@ -244,6 +247,22 @@ export function triggerEvent(state: RaceState, eventId: EventId, babyId = 0): bo
     case 'R06': effect('happy', 1.5); break;
     case 'R07': effect('distracted', 3); rt.distraction[babyId] = { x: baby.x > 0 ? -4.8 : 4.8, z: baby.z - 0.6 }; break;
     case 'R08': effect('groove', 2.5); baby.attention = 1; break;
+    case 'R09': effect('rest', 3); break;
+    case 'R10': {
+      effect('rest', 2.2);
+      baby.mood = Math.max(0.3, baby.mood - 0.18);
+      for (const other of state.babies) {
+        if (other.id === babyId || other.finishedAt !== null || other.eventId ||
+            Math.hypot(other.x - baby.x, other.z - baby.z) > 5.5 ||
+            state.time < rt.eventReady[other.id] || state.time - rt.lastNegative[other.id] < 7) continue;
+        applyEffect(state, other, eventId, 'rest', 2.2);
+        other.mood = Math.max(0.3, other.mood - 0.18);
+        notify(state, other, 'えーん！つられてギャン泣き！', 'rare', eventId);
+      }
+      // The common notification below comes last, keeping the actual initiator
+      // newest so the cinematic director can deduplicate the relay correctly.
+      break;
+    }
     case 'S01': effect('awakening', AWAKE_DURATION); break;
     case 'S02': effect('awakening', 3.2); break;
     case 'S03': effect('awakening', 2.6); break;
@@ -252,6 +271,7 @@ export function triggerEvent(state: RaceState, eventId: EventId, babyId = 0): bo
     case 'S06': effect('awakening', 3.1); break;
     case 'S07': effect('awakening', 2.6); break;
     case 'S08': effect('rest', 1); baby.heading = Math.PI; break;
+    case 'S09': effect('awakening', 5); baby.mood = 1; break;
   }
   if (definition.rarity !== 'normal') { baby.attention = Math.max(0.8, baby.attention); rt.lastRing[babyId] = rt.clock; }
   const text = eventId === 'S01' ? '突然立ったーー！！' : definition.name + (definition.name.endsWith('！') ? '' : '！');
@@ -375,6 +395,7 @@ function updateBaby(state: RaceState, baby: Baby, dt: number, lastPlaceId: numbe
   }
   const eventId = baby.eventId;
   if (eventId === 'S01') baby.awakeningPhase = baby.stateTime > AWAKE_RUN + AWAKE_LANDING ? 'pose' : baby.stateTime > AWAKE_LANDING ? 'run' : 'landing';
+  if (eventId === 'S09') baby.awakeningPhase = baby.stateTime > 2 + 1e-8 ? 'pose' : 'run';
   if (baby.state === 'rest' || baby.state === 'look' || (baby.state === 'awakening' && baby.awakeningPhase !== 'run')) return;
   const rattle = state.rattles[id], isAwake = baby.state === 'awakening', isSuper = state.time <= rt.superUntil[id], distracted = baby.state === 'distracted';
   const other = rt.targetBaby[id] === null ? undefined : state.babies[rt.targetBaby[id]!];
@@ -406,6 +427,7 @@ function updateBaby(state: RaceState, baby: Baby, dt: number, lastPlaceId: numbe
     case 'S05': multiplier = 1.7; desired = Math.PI; turnRate = 9; break;
     case 'S06': multiplier = 1.7; turnRate = 3.6; break;
     case 'S07': multiplier = 1.6; desired = Math.atan2(dx * 2.5, -dz); turnRate = 8.5; break;
+    case 'S09': multiplier = 1.8; turnRate = 2.4; break;
     default: if (baby.state === 'groove') multiplier = 1.24;
   }
   baby.heading = turnTowards(baby.heading, desired, dt * turnRate);

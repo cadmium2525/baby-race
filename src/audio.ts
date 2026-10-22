@@ -9,6 +9,7 @@ const now = () => typeof performance === 'undefined' ? Date.now() : performance.
 /** Local synthesis only: neither effects nor commentary download sound assets. */
 export class GameAudio {
   enabled = true;
+  get diagnostics() { return { enabled: this.enabled, context: this.context?.state ?? 'unavailable', activeSources: this.sources.size, eventSources: this.effectSources.size }; }
   private context: AudioContext | null = null;
   private output: GainNode | null = null;
   private noise: AudioBuffer | null = null;
@@ -196,6 +197,21 @@ export class GameAudio {
         this.notes([392, 523, 659, 784], 0.12, 0.16, 'triangle', 0.29);
         this.tone(392, 0.4, 0.35, 'sine', 0.16);
         break;
+      case 'R09':
+        this.tone(110, .23, 0, 'triangle', .35, 45);
+        this.tone(85, .12, .19, 'sine', .28, 160);
+        this.notes([659, 523, 659, 523], .13, .1, 'square', .065, .45);
+        [.98, 1.3, 1.65, 2.0].forEach(delay=>this.shake(delay,.22,1700));
+        this.notes([523, 659, 784, 1047, 1568], .1, .23, 'triangle', .23, 2.75);
+        break;
+      case 'R10':
+        this.tone(1100,.1,0,'sine',.16,330);
+        this.tone(220,.13,.12,'triangle',.18,110);
+        this.wail(.28,1);
+        this.wail(1.02,1.12);
+        this.wail(1.75,.9);
+        this.wail(2.38,1.2);
+        break;
       case 'S01': this.cue('awakening'); break;
       case 'S02':
         this.notes([220, 440, 330, 660, 440, 880], 0.15, 0.065, 'square', 0.09);
@@ -228,6 +244,20 @@ export class GameAudio {
         this.notes([784, 988, 1319], 0.08, 0.27, 'sine', 0.29);
         this.giggle(0.38, 2, 0.88);
         break;
+      case 'S09': {
+        this.tone(330,.36,0,'sine',.2,1760);
+        const beat=60/152, melody=[659,784,988,784,1047,988,784,659];
+        for(let i=0;i<10;i++) {
+          const delay=.3+i*beat;
+          this.tone(135,.12,delay,'sine',.24,48);
+          this.tone(i%4<2?165:196,.15,delay+.03,'sawtooth',.045);
+          this.shake(delay+beat/2,.075,6500);
+          if(i%2===1)this.shake(delay,.15,1800);
+          this.tone(melody[i%melody.length],.14,delay,'square',.05);
+          this.tone(melody[(i+2)%melody.length],.12,delay+beat/2,'triangle',.1);
+        }
+        break;
+      }
     }
   }
 
@@ -245,6 +275,13 @@ export class GameAudio {
       this.tone(frequency, 0.085, offset, 'sine', 0.26, frequency * 1.3);
       this.tone(frequency * 1.7, 0.06, offset + 0.035, 'sine', 0.08, frequency * 1.1);
     }
+  }
+
+  /** A rising sob and falling vowel; overlapping pitches suggest a crying relay. */
+  private wail(delay: number, pitch: number): void {
+    this.tone(480*pitch,.19,delay,'triangle',.12,930*pitch);
+    this.tone(930*pitch,.39,delay+.18,'sine',.24,540*pitch);
+    this.tone(1430*pitch,.35,delay+.2,'sine',.035,1080*pitch);
   }
 
   private track(source: AudioScheduledSourceNode, nodes: AudioNode[]): void {

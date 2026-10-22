@@ -24,7 +24,7 @@ app.innerHTML = `
   <div id="controls-hint" class="controls-hint"></div><button id="mobile-ring" class="mobile-ring" aria-label="ガラガラを鳴らす">${rattleIcon}<span>鳴らす！</span></button>
   <section id="menu" class="menu-overlay" aria-label="タイトルメニュー"><div class="menu-content"><div class="eyebrow">BABY'S FIRST GRAND PRIX</div><h1><span class="title-top">ガラガラ！<i>✦</i></span><span class="title-bottom">ハイハイレース</span></h1><div class="title-decoration"><span></span><i>●</i><i>●</i><i>●</i></div><p class="intro-copy">お願い！ そっちじゃないって！！<br><span>4体の気まぐれベビーが繰り広げる60秒。</span></p>
   <div class="mode-selector" role="group" aria-label="レースのモード"><button class="mode-option" data-mode="normal"><span class="mode-icon">☀</span><span class="mode-name" id="normal-mode-name">ひとりでレース</span><span class="mode-description">まずはここから</span></button><button class="mode-option" data-mode="chaos"><span class="mode-icon">✦</span><span class="mode-name">ハプニング大盛り</span><span class="mode-description">まさかの連続！</span></button><button class="mode-option" data-mode="skill"><span class="mode-icon">⚑</span><span class="mode-name">ガチハイハイ</span><span class="mode-description">誘導の腕だめし</span></button></div>
-  <button id="setup-button" class="setup-summary"><span id="setup-summary"></span><b>準備する ↗</b></button><button id="start-button" class="primary-button">レースをはじめる <span class="arrow">↗</span></button><p class="menu-note" id="menu-note"></p><div class="menu-links"><button id="catalog-button">ハプニングずかん <span id="catalog-count">0 / 24</span></button><span id="record-summary"></span></div></div><div class="menu-scene-tag"><span class="tiny-star">✦</span><span>READY, BABY?<small>速いだけじゃ、勝てない。</small></span></div><footer class="menu-footer"><span class="version">BABY RACE <b>ver. 2.1.1</b></span><span class="engine-tag">ちいさなレース、おおきなハプニング。</span></footer></section>
+  <button id="setup-button" class="setup-summary"><span id="setup-summary"></span><b>準備する ↗</b></button><button id="start-button" class="primary-button">レースをはじめる <span class="arrow">↗</span></button><p class="menu-note" id="menu-note"></p><div class="menu-links"><button id="catalog-button">ハプニングずかん <span id="catalog-count">0 / ${EVENTS.length}</span></button><span id="record-summary"></span></div></div><div class="menu-scene-tag"><span class="tiny-star">✦</span><span>READY, BABY?<small>速いだけじゃ、勝てない。</small></span></div><footer class="menu-footer"><span class="version">BABY RACE <b>ver. 2.2</b></span><span class="engine-tag">ちいさなレース、おおきなハプニング。</span></footer></section>
   <section id="setup" class="dialog-overlay" hidden aria-label="レースの準備"><div class="dialog-card setup-card"><div class="dialog-heading"><div><span class="eyebrow">GET READY</span><h2>みんなのレースをつくろう。</h2></div><button id="setup-close-x" class="icon-button" aria-label="準備を閉じる">×</button></div>
   <div class="setup-section"><label for="human-players">あそぶ人数</label><select id="human-players"><option value="1">ひとり ＋ CPU 3体</option><option value="2">ふたり ＋ CPU 2体</option><option value="3">3人 ＋ CPU 1体</option><option value="4">4人で対戦</option></select><p class="setup-note">同じ端末で対戦。キーボード・最大4台のゲームパッドに対応。</p></div>
   <div class="setup-section"><h3>コースをえらぶ</h3><div class="course-options">${COURSES.map((course,i)=>`<button class="course-option" data-course="${course.id}" style="--course-color:#${course.palette[0].toString(16)}"><span>COURSE 0${i+1}</span><strong>${course.name}</strong><small>${course.description}</small></button>`).join('')}</div></div>
@@ -68,7 +68,7 @@ function refreshSettings() {
   el('menu-note').textContent = `${count} PLAYER${count>1?'S':''}${count<4?` vs ${4-count} CPU`:''} · 60 SEC`;
   el('normal-mode-name').textContent = count===1 ? 'ひとりでレース' : 'みんなでレース';
   el<HTMLSelectElement>('human-players').value = String(count);
-  el('catalog-count').textContent = `${records.seen.length} / 24`;
+  el('catalog-count').textContent = `${records.seen.length} / ${EVENTS.length}`;
   el('record-summary').textContent = records.races ? `${records.races}レース · ${records.wins}勝` : 'どんなハプニングに出会うかな？';
   document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button=>{ const active=button.dataset.mode===preferences.mode; button.classList.toggle('active',active); button.setAttribute('aria-pressed',String(active)); });
   document.querySelectorAll<HTMLButtonElement>('[data-course]').forEach(button=>{ const active=button.dataset.course===preferences.courseId; button.classList.toggle('active',active); button.setAttribute('aria-pressed',String(active)); });
@@ -129,7 +129,7 @@ function togglePause() {
 function openDialog(id: string) { dialogWasPaused=paused; paused=true; keys.clear(); audio.stopCommentary(); el(id).hidden=false; }
 function closeDialog(id: string) { el(id).hidden=true; paused=dialogWasPaused; }
 function renderCatalog() {
-  el('catalog-progress').textContent=`発見 ${records.seen.length} / 24 · 大盛りモードでいろいろ探してみよう！`;
+  el('catalog-progress').textContent=`発見 ${records.seen.length} / ${EVENTS.length} · 大盛りモードでいろいろ探してみよう！`;
   el('catalog-list').innerHTML=(['normal','rare','legendary'] as const).map((rarity,i)=>`<h3>${['いつものハプニング','レアハプニング','バカ覚醒ハプニング'][i]}</h3><div class="event-grid">${EVENTS.filter(e=>e.rarity===rarity).map(event=>{const seen=records.seen.includes(event.id);return `<article class="event-entry ${seen?'discovered':'undiscovered'}"><span class="event-icon">${seen?event.icon:'?'}</span><div><small>${event.id}</small><strong>${seen?event.name:'まだ出会っていない'}</strong><p>${seen?event.description:'レースを走って、発見しよう！'}</p></div></article>`;}).join('')}</div>`).join('');
 }
 document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button=>button.addEventListener('click',()=>{preferences.mode=button.dataset.mode as Mode;save();refreshSettings();rebuildPreview();}));
@@ -194,7 +194,7 @@ function finish(){
   el('result-title').textContent=race.humanPlayers===1?(winner===0?'やったね！ 1位！':'ナイス、ハイハイ！'):`${playerLabel(winner)} の勝ち！`;
   el('result-subtitle').textContent=`${race.babies[winner].name}、おめでとう！ ${getCourse(race.courseId).name}`;
   el('result-stats').innerHTML=ranking.map((baby,i)=>`<div class="result-row"><span class="result-place" style="color:${baby.style.color}">${i+1}<small>位</small></span><strong>${playerLabel(baby.id)} · ${esc(baby.name)}</strong><span>${baby.finishedAt!==null?`${baby.finishedAt.toFixed(1)} 秒`:`${Math.floor(getProgress(baby)*100)} %`}</span></div>`).join('');
-  el('discovery-summary').textContent=raceDiscoveries.length?`NEW！ ${raceDiscoveries.map(id=>getEvent(id).name).join(' / ')}`:`ずかん ${records.seen.length} / 24 · 次はどんなハプニング？`;
+  el('discovery-summary').textContent=raceDiscoveries.length?`NEW！ ${raceDiscoveries.map(id=>getEvent(id).name).join(' / ')}`:`ずかん ${records.seen.length} / ${EVENTS.length} · 次はどんなハプニング？`;
   el('result').hidden=false;el('retry-button').focus();const baby=race.babies[winner];world?.confetti(baby.x,baby.z,80);refreshSettings();
 }
 function positionLabels(){
@@ -238,18 +238,25 @@ function updateUI(){
 function syncCinematic(shot: CinematicFrame|null) {
   el('cinematic').hidden=!shot;
   document.body.dataset.cinematic=String(!!shot);
-  if(!shot){presentedShot='';return;}
+  if(!shot){presentedShot='';delete el('cinematic').dataset.event;return;}
   const key=`${shot.eventId}:${shot.babyId}:${race.time}`;
   if(key!==presentedShot){
     presentedShot=key;keys.clear();audio.stopCommentary();
+    el('cinematic').dataset.event=shot.eventId;
     const definition=getEvent(shot.eventId),baby=race.babies[shot.babyId];
     el('cinematic-player').textContent=`${playerLabel(shot.babyId)} · ${baby.name}`;
     el('cinematic-title').textContent=definition.name;
     el('cinematic-description').textContent=definition.description;
-    el('cinematic-rarity').textContent=definition.rarity==='legendary'?'BABY AWAKENING!':'RARE HAPPENING!';
+    el('cinematic-rarity').textContent=shot.eventId==='R09'?'緊急おむつピットイン！':shot.eventId==='R10'?'ギャン泣き、連鎖中！':shot.eventId==='S09'?'GAL MODE ON ☆':definition.rarity==='legendary'?'BABY AWAKENING!':'RARE HAPPENING!';
     el('cinematic').classList.toggle('legendary',definition.rarity==='legendary');
     audio.event(shot.eventId,playerLabel(shot.babyId));
   }
+  const t=shot.elapsed;
+  const crying=race.babies.filter(baby=>baby.eventId==='R10').length;
+  const beat=shot.eventId==='R09'?(t<.8?'プ、プリッ……今!?':t<1.7?'レース中ですが、おむつを交換します。':t<3?'ふきふき……新品おむつ、装着！':'交換完了！さっぱりして再出走！')
+    :shot.eventId==='R10'?(t<.7?'あっ！おしゃぶり、落としたーー！':t<2.6?`${crying}体で大合唱！うぇぇぇぇ〜ん！！`:'おしゃぶり発見！泣きやむまで、あと少し。')
+    :shot.eventId==='S09'?(t<.7?'メイク完了。ウチ、今日からギャルなんで☆':t<3.8?'レース？いったんパラパラっしょ☆':'レース復帰！まだまだパラパラっしょ☆'):null;
+  if(beat&&el('cinematic-description').textContent!==beat)el('cinematic-description').textContent=beat;
   el('cinematic-fill').style.width=`${shot.elapsed/shot.duration*100}%`;
 }
 function syncHeldGamepads() {
@@ -267,4 +274,4 @@ function frame(now:number){
 }
 configureRacers();loadCustomFields();syncSound();syncPhase();requestAnimationFrame(frame);
 window.addEventListener('pagehide',()=>audio.dispose(),{once:true});
-Object.defineProperty(window,'__babyRace',{get:()=>({phase:race.phase,mode:race.mode,courseId:race.courseId,humanPlayers:race.humanPlayers,time:race.time,paused,cinematic:director.frame,camera:world?{viewHeight:world.viewHeight,x:world.camera.position.x,y:world.camera.position.y,z:world.camera.position.z}:null,babies:race.babies.map(b=>({id:b.id,name:b.name,isCpu:b.isCpu,style:{...b.style},x:b.x,z:b.z,state:b.state,stateTime:b.stateTime,eventId:b.eventId,zone:b.zone,progress:getProgress(b),superUsed:b.superUsed})),rattles:race.rattles.map(r=>({...r})),winner:race.winner,events:race.events.map(e=>({text:e.text,kind:e.kind,eventId:e.eventId})),discovered:[...records.seen]})});
+Object.defineProperty(window,'__babyRace',{get:()=>({phase:race.phase,mode:race.mode,courseId:race.courseId,humanPlayers:race.humanPlayers,time:race.time,paused,cinematic:director.frame,audio:audio.diagnostics,happening:world?.getHappeningDiagnostics()??null,camera:world?{viewHeight:world.viewHeight,x:world.camera.position.x,y:world.camera.position.y,z:world.camera.position.z}:null,babies:race.babies.map(b=>({id:b.id,name:b.name,isCpu:b.isCpu,style:{...b.style},x:b.x,z:b.z,state:b.state,stateTime:b.stateTime,eventId:b.eventId,zone:b.zone,progress:getProgress(b),superUsed:b.superUsed})),rattles:race.rattles.map(r=>({...r})),winner:race.winner,events:race.events.map(e=>({text:e.text,kind:e.kind,eventId:e.eventId})),discovered:[...records.seen]})});

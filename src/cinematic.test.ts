@@ -100,3 +100,36 @@ test('replay clears an unfinished shot and accepts new notification ids', () => 
   director.advance(NaN); director.advance(-1);
   assert.equal(director.frame?.elapsed,0);
 });
+
+test('diaper, crying and gyaru stories have time for their full sequence and still skip smoothly', () => {
+  for (const [id, duration] of [['R09',4.2],['R10',3.6],['S09',4.6]] as const) {
+    const director = new CinematicDirector();
+    director.observe([event(1,id)],true);
+    assert.equal(director.frame?.duration,duration);
+    director.advance(1.8);
+    assert.equal(director.frame?.phase,'hold');
+    director.skip();
+    assert.equal(director.frame?.phase,'exit');
+    director.advance(1);
+    assert.equal(director.frame?.amount,0);
+    director.advance(1/60);
+    assert.equal(director.active,false);
+  }
+});
+
+test('a crying relay features its origin once while keeping every affected racer frozen', () => {
+  const race = createRace('normal',7);
+  startRace(race); updateRace(race,3);
+  race.babies.forEach((baby,id)=>{baby.x=id;});
+  assert.equal(triggerEvent(race,'R10',2),true);
+  assert.equal(race.babies.filter(baby=>baby.eventId==='R10').length,4);
+  const before=structuredClone(race);
+  const director=new CinematicDirector();
+  director.observe(race.events,true);
+  assert.equal(director.frame?.babyId,2);
+  director.advance(3.6); director.advance(1/60);
+  assert.equal(director.active,false);
+  director.observe(race.events,true);
+  assert.equal(director.active,false);
+  assert.deepEqual(race,before);
+});

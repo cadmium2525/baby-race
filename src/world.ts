@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { type RaceState, type Baby } from './simulation';
-import { DEFAULT_STYLES, getCourse, type Accessory, type BabyStyle, type CourseId, type CourseZone } from './content';
+import { DEFAULT_STYLES, getCourse, type Accessory, type BabyStyle, type CourseId, type CourseZone, type EventId } from './content';
 import { dampRaceCamera, fitRaceCamera, type RaceCameraFrame } from './camera';
 import { type CinematicFrame } from './cinematic';
 
@@ -84,14 +84,108 @@ function addAccessory(parent: THREE.Group, kind: Accessory, color: number) {
     }
   }
 }
+function sparkle(parent: THREE.Object3D, color: number, x: number, y: number, z: number, size = .12) {
+  const group = new THREE.Group(); group.position.set(x, y, z);
+  const vertical = ball(group, color, [0, 0, 0], [size * .2, size, size * .18]);
+  ball(group, color, [0, 0, 0], [size, size * .2, size * .18]); parent.add(group); return { group, vertical };
+}
+/** Every event prop is constructed once and reused, including hidden shaders. */
+function buildHappenings(root: THREE.Group, body: THREE.Group, head: THREE.Group, color: number, skin: number) {
+  const changing = new THREE.Group(); root.add(changing); changing.visible = false;
+  box(changing, 0xb9dfdb, [0, .14, .2], [2.25, .17, 2.6], .08);
+  box(changing, 0xfff9e9, [0, .235, .2], [2.06, .025, 2.38], .01);
+  const wipes = new THREE.Group(); wipes.position.set(.87, .36, .75); changing.add(wipes);
+  box(wipes, 0x91c9bb, [0, 0, 0], [.55, .2, .5], .08);
+  box(wipes, 0xfffcf2, [0, .11, 0], [.29, .035, .28], .01);
+  const wipe = box(changing, 0xffffff, [0, .93, .55], [.58, .035, .48], .016);
+  const freshDiaper = new THREE.Group(); freshDiaper.position.set(-.78, .4, .65); changing.add(freshDiaper);
+  box(freshDiaper, 0xffffff, [0, 0, 0], [.63, .15, .52], .07);
+  box(freshDiaper, 0xaad8d4, [0, .082, 0], [.2, .025, .48], .01);
+  const cleanDiaper = ball(body, 0xffffff, [0, .61, .64], [.49, .38, .36]); cleanDiaper.visible = false;
+  const poop = new THREE.Group(); poop.position.set(.75, 2.05, -.15); root.add(poop); poop.visible = false;
+  ball(poop, 0xfffbef, [0, 0, .04], [.43, .47, .085]);
+  ball(poop, 0xbc8a67, [0, -.18, -.04], [.3, .13, .1]);
+  ball(poop, 0xbc8a67, [-.025, -.02, -.04], [.22, .12, .1]);
+  ball(poop, 0xbc8a67, [.025, .12, -.04], [.14, .1, .09]);
+  ball(poop, 0xbc8a67, [.07, .23, -.04], [.07, .075, .07]);
+  for (const side of [-1, 1]) ball(poop, C.ink, [side * .085, -.14, -.14], [.023, .032, .018]);
+  ball(poop, 0xffeed0, [0, -.23, -.135], [.055, .018, .015]);
+  const cleanStars = new THREE.Group(); root.add(cleanStars); cleanStars.visible = false;
+  for (let i = 0; i < 5; i++) sparkle(cleanStars, i % 2 ? 0xffffff : 0xf1d47d, Math.sin(i * 1.7) * .95, 1.15 + i * .14, Math.cos(i * 1.7) * .65, .12);
+
+  const droppedPacifier = new THREE.Group(); root.add(droppedPacifier); droppedPacifier.visible = false;
+  const pacifierColors: THREE.Mesh[] = [ball(droppedPacifier, color, [0, 0, 0], [.19, .13, .055])];
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(.11, .035, 8, 20), material(color)); ring.position.z = -.09; droppedPacifier.add(ring); pacifierColors.push(ring);
+  ball(droppedPacifier, 0xfffaef, [0, 0, .06], [.075, .065, .08]);
+  const tears = new THREE.Group(); head.add(tears); tears.visible = false;
+  const tearDrops: THREE.Group[] = [];
+  for (let i = 0; i < 4; i++) {
+    const drop = new THREE.Group(); tears.add(drop);
+    ball(drop, 0x72cce9, [0, 0, 0], [.074, .115, .045]);
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(.06, .13, 8), material(0x72cce9)); tip.position.y = .11; drop.add(tip);
+    ball(drop, 0xe4faff, [-.023, .04, -.043], [.017, .038, .01]); tearDrops.push(drop);
+  }
+  // Small portraits communicate the real contagion without putting another
+  // full-size racer in front of the featured face during a closeup.
+  const chorus = new THREE.Group(); root.add(chorus); chorus.visible = false;
+  const cryBuddies: {root: THREE.Group; badge: THREE.Mesh; slot: number; styleColor: string}[] = [];
+  for (let i = 0; i < 3; i++) {
+    const portrait = new THREE.Group(); portrait.position.set((i - 1) * .88, 2.12 + (i === 1 ? .22 : 0), -.05); chorus.add(portrait);
+    const badge = ball(portrait, color, [0, 0, .025], [.34, .34, .085]);
+    ball(portrait, skin, [0, -.015, -.075], [.235, .23, .085]);
+    for (const side of [-1, 1]) {
+      const eye = box(portrait, C.ink, [side * .085, .035, -.158], [.075, .022, .018], .007); eye.rotation.z = side * -.3;
+      ball(portrait, 0x72cce9, [side * .15, -.065, -.145], [.036, .075, .025]);
+    }
+    ball(portrait, 0x684250, [0, -.105, -.16], [.06, .073, .018]); cryBuddies.push({ root: portrait, badge, slot: -1, styleColor: '' });
+  }
+
+  const makeup = new THREE.Group(); head.add(makeup); makeup.visible = false;
+  for (const side of [-1, 1]) {
+    ball(makeup, 0xd797d3, [side * .23, .13, -.517], [.145, .073, .027]);
+    tube(makeup, 0x36253c, [new THREE.Vector3(side * .1, .08, -.535), new THREE.Vector3(side * .22, .13, -.555), new THREE.Vector3(side * .35, .1, -.51), new THREE.Vector3(side * .48, .21, -.46)], .018);
+    for (let lash = 0; lash < 5; lash++) {
+      const x = side * (.12 + lash * .052);
+      tube(makeup, 0x36253c, [new THREE.Vector3(x, .13, -.548), new THREE.Vector3(x + side * .025, .22 + lash * .007, -.57), new THREE.Vector3(x + side * .055, .29 + lash * .009, -.545)], .012);
+    }
+    ball(makeup, 0xf58cbf, [side * .38, -.12, -.466], [.115, .075, .025]);
+    sparkle(makeup, 0xfff1a6, side * .43, .025, -.47, .045);
+  }
+  ball(makeup, 0xf545a1, [-.045, -.185, -.558], [.075, .038, .034]);
+  ball(makeup, 0xf545a1, [.045, -.185, -.558], [.075, .038, .034]);
+  ball(makeup, 0xfa55ac, [0, -.244, -.552], [.13, .045, .035]);
+  box(makeup, 0x9d3979, [0, -.216, -.59], [.16, .013, .015], .005);
+  const partyHair = new THREE.Group(); head.add(partyHair); partyHair.visible = false;
+  ball(partyHair, 0xf5cf81, [0, .39, .1], [.59, .31, .49]);
+  for (let i = 0; i < 5; i++) { const lock = ball(partyHair, i % 2 ? 0xf0bb6c : 0xffdc94, [(i - 2) * .17, .39, -.37], [.17, .22, .14]); lock.rotation.z = -.3 + i * .13; }
+  for (const side of [-1, 1]) {
+    ball(partyHair, 0xf4c271, [side * .69, .2, .08], [.26, .38, .26]);
+    ball(partyHair, 0xff64bc, [side * .59, .3, -.02], [.1, .13, .14]);
+  }
+  const party = new THREE.Group(); root.add(party); party.visible = false;
+  const disco = new THREE.Group(); disco.position.set(1.15, 2.5, .25); party.add(disco);
+  const mirrorMaterial = new THREE.MeshStandardMaterial({ color: 0xf2e9ff, roughness: .2, metalness: .8 });
+  const mirrorCore = new THREE.Mesh(sphere, mirrorMaterial); mirrorCore.scale.setScalar(.28); disco.add(mirrorCore);
+  const tiles = new THREE.InstancedMesh(new THREE.BoxGeometry(.085, .075, .018), mirrorMaterial, 48); disco.add(tiles);
+  const stamp = new THREE.Object3D(), normal = new THREE.Vector3(), axis = new THREE.Vector3(0, 0, 1);
+  for (let row = 0; row < 6; row++) for (let col = 0; col < 8; col++) {
+    const latitude = (row + .5) / 6 * Math.PI, angle = col / 8 * Math.PI * 2;
+    normal.set(Math.sin(latitude) * Math.sin(angle), Math.cos(latitude), Math.sin(latitude) * Math.cos(angle));
+    stamp.position.copy(normal).multiplyScalar(.294); stamp.quaternion.setFromUnitVectors(axis, normal); stamp.updateMatrix(); tiles.setMatrixAt(row * 8 + col, stamp.matrix);
+  }
+  box(party, 0xe1d0e8, [1.15, 3, .25], [.015, .47, .015], .005);
+  const partyStars: THREE.Group[] = [];
+  for (let i = 0; i < 7; i++) partyStars.push(sparkle(party, i % 2 ? 0xffd6f0 : 0xf6df8c, Math.sin(i * 2.4) * 1.22, .7 + i * .23, Math.cos(i * 2.4) * .55, .13).group);
+  return { changing, wipes, wipe, freshDiaper, cleanDiaper, poop, cleanStars, droppedPacifier, pacifierColors, tears, tearDrops, chorus, cryBuddies, makeup, partyHair, party, disco, partyStars, phase: '', cryingCount: 0 };
+}
 function buildBaby(style: BabyStyle, skin: number) {
   const color = new THREE.Color(style.color).getHex(); const root = new THREE.Group(); const body = new THREE.Group(); root.add(body);
   const clothing: THREE.Mesh[] = [ball(body, color, [0, .66, .25], [.48, .39, .64])]; ball(body, 0xfffaf1, [0, .6, .62], [.47, .36, .34]);
   const head = new THREE.Group(); head.position.set(0, 1.01, -.39); body.add(head);
   ball(head, skin, [0, 0, 0], [.59, .58, .56]); ball(head, skin, [-.57, -.03, -.02], [.12, .17, .12]); ball(head, skin, [.57, -.03, -.02], [.12, .17, .12]);
-  const eyes: THREE.Mesh[] = []; const eyebrows: THREE.Mesh[] = [];
+  const eyes: THREE.Mesh[] = []; const eyebrows: THREE.Mesh[] = []; const eyeHighlights: THREE.Mesh[] = [];
   for (const side of [-1, 1]) {
-    eyes.push(ball(head, C.ink, [side * .22, .055, -.513], [.045, .066, .027])); ball(head, 0xfffcf1, [side * .22 - .009, .077, -.538], [.012, .018, .009]); ball(head, 0xecaaa0, [side * .36, -.13, -.43], [.105, .055, .018]);
+    eyes.push(ball(head, C.ink, [side * .22, .055, -.513], [.045, .066, .027])); eyeHighlights.push(ball(head, 0xfffcf1, [side * .22 - .009, .077, -.538], [.012, .018, .009])); ball(head, 0xecaaa0, [side * .36, -.13, -.43], [.105, .055, .018]);
     const brow = box(head, C.ink, [side * .22, .18, -.515], [.13, .025, .025], .01); brow.visible = false; eyebrows.push(brow);
   }
   ball(head, skin, [0, -.065, -.561], [.085, .065, .052]); const mouth = ball(head, 0xf2a9a5, [0, -.22, -.509], [.14, .09, .04]);
@@ -109,7 +203,9 @@ function buildBaby(style: BabyStyle, skin: number) {
   const ghostMaterial = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .16, depthWrite: false }); const ghosts = new THREE.InstancedMesh(sphere, ghostMaterial, 12); ghosts.visible = false; ghosts.frustumCulled = false; root.add(ghosts);
   const stamp = new THREE.Object3D(); const parts = [[0,.66,.25,.48,.39,.64],[0,1.01,-.39,.59,.58,.56],[-.5,.35,-.35,.16,.3,.17],[.5,.35,-.35,.16,.3,.17],[-.45,.3,.8,.2,.17,.27],[.45,.3,.8,.2,.17,.27]];
   for (let ghost = 0; ghost < 2; ghost++) parts.forEach((p, i) => { stamp.position.set(p[0] + (ghost ? -.24 : .2), p[1], p[2] + .9 + ghost * .9); stamp.scale.set(p[3], p[4], p[5]); stamp.updateMatrix(); ghosts.setMatrixAt(ghost * 6 + i, stamp.matrix); });
-  return { root, body, head, limbs, speedLines, clothing, accessory, eyes, eyebrows, mouth, ghosts, ghostMaterial, styleKey: `${style.color}/${style.accessory}` };
+  const happenings = buildHappenings(root, body, head, color, skin);
+  const presentation = { baby: null as Baby | null, eventId: null as EventId | null, lastStateTime: 0, showcased: false, animationOffset: 0, cutElapsed: 0, inCut: false };
+  return { root, body, head, limbs, speedLines, clothing, accessory, eyes, eyeHighlights, eyebrows, mouth, pacifier, ghosts, ghostMaterial, happenings, presentation, styleKey: `${style.color}/${style.accessory}` };
 }
 function buildRattle(color: number) {
   const root = new THREE.Group(); const toy = new THREE.Group(); root.add(toy); const colored: THREE.Mesh[] = [];
@@ -224,6 +320,7 @@ export class GameWorld {
     const rig = this.babies[index]; const key = `${style.color}/${style.accessory}`; if (key === rig.styleKey) return; rig.styleKey = key;
     const color = new THREE.Color(style.color).getHex(); rig.clothing.forEach(mesh => { mesh.material = material(color); }); clearObjects(rig.accessory); addAccessory(rig.accessory, style.accessory, color); rig.ghostMaterial.color.setHex(color);
     const rattle = this.rattles[index]; rattle.colored.forEach(mesh => { mesh.material = material(color); }); rattle.wave.material.color.setHex(color); rattle.range.material.color.setHex(color);
+    rig.happenings.pacifierColors.forEach(mesh => { mesh.material = material(color); });
     this.materialsNeedWarmup = true;
   }
   private updateCamera(state: RaceState, dt: number, cinematic?: CinematicFrame | null) {
@@ -247,15 +344,19 @@ export class GameWorld {
       // audience. Only the camera changes, never the baby's simulation pose.
       if (cinematic.eventId === 'S03' || cinematic.eventId === 'S05') faceAngle += Math.PI * .8;
       else if (cinematic.eventId === 'S08') faceAngle = -2.87;
+      else if (cinematic.eventId === 'R09') faceAngle -= .38;
       const frontX = -Math.sin(faceAngle), frontZ = -Math.cos(faceAngle);
-      this.closeTarget.set(baby.x + frontX * .15, cinematic.eventId === 'R02' ? .9 : 1.15, baby.z + frontZ * .15);
+      const partyWide = cinematic.eventId === 'S09' ? THREE.MathUtils.smoothstep(cinematic.elapsed, 1.2, 1.8) : 0;
+      const closeY = cinematic.eventId === 'R02' ? .9 : cinematic.eventId === 'S09' ? THREE.MathUtils.lerp(1.65, 1.5, partyWide) : cinematic.eventId === 'R10' ? 1.35 : 1.15;
+      this.closeTarget.set(baby.x + frontX * .15, closeY, baby.z + frontZ * .15);
       this.closeEye.set(this.closeTarget.x + frontX * 12, this.closeTarget.y + 4, this.closeTarget.z + frontZ * 12);
       this.closeMatrix.lookAt(this.closeEye, this.closeTarget, this.cameraUp); this.closeRotation.setFromRotationMatrix(this.closeMatrix);
       this.target.set(this.savedCamera.x, this.savedCamera.y, this.savedCamera.z).lerp(this.closeTarget, amount);
       this.camera.quaternion.copy(this.savedRotation).slerp(this.closeRotation, amount);
       const distance = THREE.MathUtils.lerp(this.cameraOffset.length(), Math.hypot(12, 4), amount);
       this.camera.position.set(0, 0, distance).applyQuaternion(this.camera.quaternion).add(this.target);
-      const closeHeight = Math.max(3.45, 2.65 / aspect);
+      const closeHeight = cinematic.eventId === 'S09' ? Math.max(THREE.MathUtils.lerp(3.0, 4.2, partyWide), THREE.MathUtils.lerp(2.65, 3.5, partyWide) / aspect)
+        : cinematic.eventId === 'R10' ? Math.max(4.05, 3.35 / aspect) : cinematic.eventId === 'R09' ? Math.max(3.9, 3.25 / aspect) : Math.max(3.45, 2.65 / aspect);
       this.viewHeight = Math.exp(Math.log(this.savedCamera.height) + (Math.log(closeHeight) - Math.log(this.savedCamera.height)) * amount);
     } else {
       this.cutBabyId = -1; this.cutEvent = null; this.cutElapsed = 0;
@@ -274,12 +375,48 @@ export class GameWorld {
       rig.root.visible = !cinematic || cinematic.babyId === b.id || cinematic.amount <= .035;
       rig.root.scale.setScalar(intro && mobile ? 1.48 : 1.16);
       const preview = cinematic?.babyId === i ? cinematic : undefined;
-      rig.root.position.set(intro ? (i % 2 ? 3 : 0) : b.x, .04, intro ? 13 - Math.floor(i / 2) * 4 - i % 2 : b.z); rig.root.rotation.set(0, intro ? -2.65 + Math.sin(elapsed * .5 + i) * .08 : -b.heading, 0); this.animateBaby(rig, b, elapsed + (preview?.elapsed ?? 0), intro, preview);
+      const presentation = rig.presentation;
+      // A new race, another effect, or a restarted timer identifies a fresh
+      // occurrence. Presentation memory never changes the simulation's timer.
+      if (presentation.baby !== b || presentation.eventId !== b.eventId || b.stateTime > presentation.lastStateTime + 1e-6) {
+        presentation.showcased = false; presentation.animationOffset = 0; presentation.cutElapsed = 0; presentation.inCut = false;
+      }
+      presentation.baby = b; presentation.eventId = b.eventId; presentation.lastStateTime = b.stateTime;
+      if (preview && preview.eventId === b.eventId) {
+        presentation.showcased = true; presentation.inCut = true; presentation.cutElapsed = preview.elapsed;
+      } else if (presentation.inCut) {
+        // Continue a crying/dancing pose at the exact phase shown in the final
+        // cut frame instead of rewinding its cosmetic animation clock.
+        presentation.animationOffset += presentation.cutElapsed; presentation.cutElapsed = 0; presentation.inCut = false;
+      }
+      // The R10 chorus also portrays the affected neighbours' lost pacifiers;
+      // they must return still crying, without dropping them a second time.
+      if (cinematic?.eventId === 'R10' && b.eventId === 'R10') presentation.showcased = true;
+      const visualTime = elapsed + presentation.animationOffset + (preview?.elapsed ?? 0);
+      rig.root.position.set(intro ? (i % 2 ? 3 : 0) : b.x, .04, intro ? 13 - Math.floor(i / 2) * 4 - i % 2 : b.z); rig.root.rotation.set(0, intro ? -2.65 + Math.sin(elapsed * .5 + i) * .08 : -b.heading, 0); this.animateBaby(rig, b, visualTime, intro, preview);
       const r = this.rattles[i]; const rattle = state.rattles[i]; r.root.visible = !intro && state.phase !== 'finished' && !cinematic; r.root.position.set(rattle.x, .85 + Math.sin(elapsed * 3 + i) * .06, rattle.z);
       r.toy.rotation.z = rattle.pulse > 0 && !this.reducedMotion ? Math.sin(elapsed * 60) * .3 : -.2; const pulse = Math.max(0, rattle.pulse); r.wave.visible = pulse > 0;
       r.wave.scale.setScalar(1 + (1 - Math.min(1, pulse / .5)) * 5); r.wave.material.opacity = Math.min(.6, pulse * 1.5); r.wave.position.y = .19 - r.root.position.y;
       r.range.visible = !b.isCpu; r.range.material.opacity = state.humanPlayers === 1 ? .075 : .035; r.range.position.y = .18 - r.root.position.y; r.range.scale.setScalar(b.zone === 'echo' ? 1.6 : 1);
     });
+    for (const rig of this.babies) { rig.happenings.chorus.visible = false; rig.happenings.cryingCount = 0; }
+    if (cinematic?.eventId === 'R10') {
+      const rig = this.babies[cinematic.babyId], h = rig.happenings;
+      let affected = 0;
+      for (const baby of state.babies) if (baby.eventId === 'R10') affected++;
+      h.cryingCount = affected; h.chorus.visible = affected > 1;
+      let slot = 0;
+      for (const baby of state.babies) {
+        if (baby.id === cinematic.babyId || baby.eventId !== 'R10') continue;
+        const portrait = h.cryBuddies[slot]; if (!portrait) break;
+        portrait.root.visible = cinematic.elapsed >= .8 + slot * .23;
+        portrait.root.position.set((slot - (affected - 2) / 2) * .88, 2.15 + Math.sin(cinematic.elapsed * 13 + slot) * .045, -.05);
+        portrait.root.rotation.z = Math.sin(cinematic.elapsed * 12 + slot) * .08;
+        if (portrait.slot !== baby.id || portrait.styleColor !== baby.style.color) { portrait.slot = baby.id; portrait.styleColor = baby.style.color; portrait.badge.material = material(new THREE.Color(baby.style.color).getHex()); }
+        slot++;
+      }
+      for (; slot < h.cryBuddies.length; slot++) h.cryBuddies[slot].root.visible = false;
+    }
     for (const b of this.rollingBalls) { const t = this.reducedMotion ? b.phase : elapsed * .85 + b.phase; b.root.position.set(b.x + Math.sin(t) * b.width, .58, b.z + Math.cos(t * .7) * Math.min(.25, b.depth * .08)); b.root.rotation.z = -Math.sin(t) * b.width / .4; b.root.rotation.x = t * .5; }
     if (!cinematic) for (let i = this.effects.length - 1; i >= 0; i--) { const fx = this.effects[i]; fx.life -= dt; fx.velocity.y -= dt * 4; fx.mesh.position.addScaledVector(fx.velocity, dt); fx.mesh.rotation.x += dt * 4; fx.mesh.rotation.z += dt * 3; if (fx.life < 0 || fx.mesh.position.y < .16) { this.scene.remove(fx.mesh); this.effects.splice(i, 1); } }
     this.updateCamera(state, dt, cinematic);
@@ -290,6 +427,14 @@ export class GameWorld {
     const event = intro ? null : preview?.eventId ?? b.eventId; const t = time * (b.state === 'groove' ? 14 : 8) + b.id * 2; const moving = intro || ['happy', 'groove', 'distracted', 'awakening'].includes(b.state); const motion = this.reducedMotion ? .35 : 1;
     rig.body.rotation.set(0, 0, 0); rig.body.position.set(0, moving ? Math.sin(t * 2) * .028 * motion : 0, 0); rig.head.rotation.set(b.state === 'rest' ? .12 : 0, b.state === 'look' ? Math.sin(time * 3) * .45 : Math.sin(time * 1.5) * .04, 0);
     rig.speedLines.visible = false; rig.ghosts.visible = event === 'S06'; rig.ghostMaterial.opacity = .16 + Math.sin(time * 12) * .025 * motion;
+    const h = rig.happenings;
+    h.changing.visible = h.poop.visible = h.cleanStars.visible = h.cleanDiaper.visible = false;
+    h.droppedPacifier.visible = h.tears.visible = false;
+    h.makeup.visible = h.partyHair.visible = h.party.visible = event === 'S09';
+    h.phase = '';
+    rig.accessory.visible = event !== 'S09'; rig.pacifier.visible = event !== 'S09' && event !== 'R10';
+    rig.mouth.visible = event !== 'S09'; rig.mouth.material = material(0xf2a9a5);
+    for (const highlight of rig.eyeHighlights) highlight.visible = event !== 'R10';
     rig.eyes.forEach(eye => { eye.scale.y = .066; }); rig.eyebrows.forEach(brow => { brow.visible = false; }); rig.mouth.scale.set(.14, .09, .04); rig.mouth.rotation.z = 0;
     rig.limbs.forEach((limb, j) => { limb.rotation.set(moving ? Math.sin(t + (j % 3 === 0 ? 0 : Math.PI)) * .3 * motion : 0, 0, 0); });
     const sit = () => { rig.body.rotation.x = .42; rig.body.position.y = .08; rig.head.rotation.x = -.35; rig.limbs[1].rotation.x = -.65; rig.limbs[3].rotation.x = -.65; };
@@ -313,6 +458,39 @@ export class GameWorld {
       case 'R06': rig.root.rotation.y += this.reducedMotion ? Math.sin(time * 2) * .4 : time * 8; rig.limbs[0].rotation.z = .7; rig.limbs[2].rotation.z = -.7; break;
       case 'R07': rig.head.rotation.x = -.15; rig.head.rotation.y = Math.sin(time * 2) * .45; rig.limbs[2].rotation.x = -.8; break;
       case 'R08': rig.body.rotation.x = -.1; rig.head.rotation.x = .08; fast(17, .4); rig.eyebrows.forEach((brow, i) => { brow.visible = true; brow.rotation.z = i ? .2 : -.2; }); break;
+      case 'R09': {
+        const duration = b.z < -16 ? .65 : 3;
+        const progress = preview ? THREE.MathUtils.clamp(preview.elapsed / preview.duration, 0, 1) : rig.presentation.showcased ? 1 : THREE.MathUtils.clamp(1 - b.stateTime / duration, 0, 1);
+        sit(); rig.head.rotation.z = Math.sin(time * 3) * .06 * motion;
+        h.phase = progress < .2 ? 'surprise' : progress < .62 ? 'wipe' : progress < .84 ? 'fresh-diaper' : 'clean';
+        h.poop.visible = progress < .28; h.poop.rotation.z = Math.sin(time * 5) * .1 * motion;
+        h.changing.visible = progress >= .16; h.wipes.visible = progress < .88;
+        h.wipe.visible = progress >= .25 && progress < .66;
+        h.wipe.position.set(.42 + Math.sin(time * 13) * .28 * motion, .88, .56 + Math.cos(time * 13) * .18 * motion); h.wipe.rotation.z = -.2 + Math.sin(time * 13) * .1;
+        const change = THREE.MathUtils.smoothstep(progress, .6, .81);
+        h.freshDiaper.visible = progress >= .48 && progress < .84;
+        h.freshDiaper.position.set(-.78 * (1 - change), .4 + change * .2, .65); h.freshDiaper.rotation.z = -.12 * (1 - change);
+        h.cleanDiaper.visible = progress >= .73; h.cleanStars.visible = progress >= .73;
+        h.cleanStars.rotation.y = time * .65;
+        rig.limbs[0].rotation.set(-.8, 0, .6); rig.limbs[2].rotation.set(-.8, 0, -.6);
+        rig.limbs[1].rotation.x = -.8 + Math.sin(time * 8) * .14 * motion; rig.limbs[3].rotation.x = -.8 - Math.sin(time * 8) * .14 * motion;
+        break;
+      }
+      case 'R10': {
+        const progress = preview ? THREE.MathUtils.clamp(preview.elapsed / preview.duration, 0, 1) : THREE.MathUtils.clamp(1 - b.stateTime / 2.2, 0, 1);
+        const drop = !preview && rig.presentation.showcased ? 1 : THREE.MathUtils.smoothstep(progress, 0, .22);
+        sit(); h.phase = drop < .99 ? 'pacifier-falling' : 'crying'; h.droppedPacifier.visible = true; h.tears.visible = true;
+        h.droppedPacifier.position.set(.12 + drop * .22, 1.0 - drop * .76 + (drop > .98 ? Math.abs(Math.sin(time * 9)) * .025 * motion : 0), -.82 - drop * .26);
+        h.droppedPacifier.rotation.set(drop * 2.1, 0, drop * .8);
+        rig.mouth.material = material(0x67414d); rig.mouth.scale.set(.17, .19, .06);
+        rig.eyes.forEach(eye => { eye.scale.y = .018; });
+        rig.eyebrows.forEach((brow, i) => { brow.visible = true; brow.rotation.z = i ? -.32 : .32; });
+        rig.head.rotation.z = Math.sin(time * 15) * .09 * motion; rig.body.position.y += Math.abs(Math.sin(time * 16)) * .05 * motion;
+        rig.limbs[0].rotation.set(-.9 + Math.sin(time * 18) * .45 * motion, 0, .7); rig.limbs[2].rotation.set(-.9 - Math.sin(time * 18) * .45 * motion, 0, -.7);
+        rig.limbs[1].rotation.x = -.6 + Math.sin(time * 20) * .4 * motion; rig.limbs[3].rotation.x = -.6 - Math.sin(time * 20) * .4 * motion;
+        for (let i = 0; i < h.tearDrops.length; i++) { const fall = (time * 1.5 + Math.floor(i / 2) * .5) % 1; h.tearDrops[i].position.set((i % 2 ? 1 : -1) * (.28 + fall * .12), .035 - fall * .7, -.54 + fall * .06); h.tearDrops[i].scale.setScalar(.8 + Math.sin(fall * Math.PI) * .3); }
+        break;
+      }
       case 'S01': {
         // The race's pose timer is deliberately frozen during a cut. Preview
         // the rise, pose and run locally, without writing to the Baby object.
@@ -328,9 +506,42 @@ export class GameWorld {
       case 'S06': fast(18, .4); rig.body.rotation.z = Math.sin(time * 12) * .08 * motion; break;
       case 'S07': sit(); rig.body.rotation.z = Math.sin(time * 5) * .22 * motion; rig.root.rotation.y += Math.sin(time * 2.5) * .6 * motion; rig.limbs[0].rotation.z = .9; rig.limbs[2].rotation.z = -.9; rig.speedLines.visible = true; break;
       case 'S08': sit(); rig.root.rotation.y = -2.65; rig.head.rotation.z = -.24; rig.head.rotation.y = -.22; rig.limbs[0].rotation.set(-.8, 0, 1.1); rig.limbs[2].rotation.set(.2, 0, -.9); rig.eyes.forEach(eye => { eye.scale.y = .026; }); rig.mouth.rotation.z = -.3; rig.mouth.scale.set(.16, .045, .04); rig.eyebrows.forEach((brow, i) => { brow.visible = true; brow.rotation.z = i ? -.2 : .2; }); break;
+      case 'S09': {
+        const running = !preview && b.awakeningPhase === 'run';
+        stand(.92); h.phase = running ? 'gyaru-dash' : 'para-para';
+        rig.head.rotation.z = Math.sin(time * 5) * .075 * motion; rig.head.rotation.y = Math.sin(time * 3) * .08;
+        if (running) { fast(24, .6); rig.speedLines.visible = true; h.party.visible = false; }
+        else {
+          const beat = Math.sin(time * 8), alternate = Math.sin(time * 8 + Math.PI / 2);
+          rig.body.rotation.z = beat * .12 * motion;
+          rig.limbs[0].rotation.set(-1.1 + alternate * .5 * motion, 0, .9 + beat * .7 * motion);
+          rig.limbs[2].rotation.set(-1.1 - alternate * .5 * motion, 0, -.9 + beat * .7 * motion);
+          rig.limbs[1].rotation.x = beat * .28 * motion; rig.limbs[3].rotation.x = -beat * .28 * motion;
+          rig.body.position.y += Math.abs(beat) * .07 * motion;
+          h.disco.rotation.y = time * .9 * motion;
+          for (let i = 0; i < h.partyStars.length; i++) { h.partyStars[i].rotation.z = time * .7 + i; h.partyStars[i].scale.setScalar(.7 + Math.sin(time * 9 + i * 2) * .28 * motion); }
+        }
+        break;
+      }
     }
     if (event !== 'S05') rig.speedLines.rotation.y = 0;
     if (!event && b.state === 'awakening') { stand(); fast(23); rig.speedLines.visible = b.awakeningPhase === 'run'; }
+  }
+  /** Read-only snapshots for QA; taking one never changes the scene or rules. */
+  getHappeningDiagnostics() {
+    return this.babies.map((rig, babyId) => ({
+      babyId, visible: rig.root.visible, phase: rig.happenings.phase,
+      showcased: rig.presentation.showcased,
+      makeup: rig.happenings.makeup.visible, partyHair: rig.happenings.partyHair.visible,
+      accessoryVisible: rig.accessory.visible, pacifierVisible: rig.pacifier.visible,
+      pacifierDropped: rig.happenings.droppedPacifier.visible, tears: rig.happenings.tears.visible,
+      pacifierOnFloor: rig.happenings.droppedPacifier.visible && rig.happenings.phase === 'crying',
+      cryingCount: rig.happenings.cryingCount,
+      cryingPortraits: rig.happenings.chorus.visible ? rig.happenings.cryBuddies.filter(p => p.root.visible).length : 0,
+      diaperStage: rig.happenings.phase === 'surprise' || rig.happenings.changing.visible ? rig.happenings.phase : null,
+      changingMat: rig.happenings.changing.visible, cleanDiaper: rig.happenings.cleanDiaper.visible,
+      discoBall: rig.happenings.party.visible,
+    }));
   }
   dispose() {
     clearObjects(this.scenery); clearObjects(this.movingScenery); const geometries = new Set<THREE.BufferGeometry>(); const ownedMaterials = new Set<THREE.Material>();
