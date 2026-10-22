@@ -1,4 +1,4 @@
-# Copy this file to .github/workflows/pages.yml in the independent baby-race repository.
+# Build and deploy this repository to GitHub Pages.
 name: Deploy baby race to GitHub Pages
 
 on:
