@@ -1,14 +1,18 @@
 import { test, expect, type Page } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
 
 type Snapshot = {
   phase: string; paused: boolean; time: number; winner: number | null;
   humanPlayers: number; courseId: string; discovered: string[];
   babies: { id: number; name: string; isCpu: boolean; x: number; z: number; state: string;
-    eventId: string | null; zone: string | null; superUsed: boolean;
+    eventId: string | null; zone: string | null; superUsed: boolean; stateTime: number;
     style: { name: string; color: string; accessory: string } }[];
   rattles: { x: number; z: number; pulse: number }[];
   events: { text: string; kind: string; eventId: string | null }[];
+  cinematic: null | { babyId: number; eventId: string; elapsed: number; duration: number; amount: number; phase: 'enter' | 'hold' | 'exit' };
+  camera: { viewHeight: number; x: number; y: number; z: number };
 };
+type CameraSample = { time: number; paused: boolean; cinematic: boolean; camera: Snapshot['camera'] };
 const snapshot = (page: Page) => page.evaluate(() => (window as unknown as { __babyRace: Snapshot }).__babyRace);
 const openGame = async (page: Page) => {
   // Decorative fonts must not make gameplay tests depend on Google's network.
@@ -28,6 +32,23 @@ const prepareFourPlayers = async (page: Page) => {
   await page.locator('#setup-close').click();
 };
 const positions = (state: Snapshot) => state.rattles.map(({ x, z }) => ({ x, z }));
+const frozenValues = (state: Snapshot) => ({ time: state.time,
+  babies: state.babies.map(({ x, z, stateTime, superUsed }) => ({ x, z, stateTime, superUsed })),
+  rattles: state.rattles.map(rattle => ({ ...rattle })),
+});
+const observeCamera = async (page: Page) => page.addInitScript(() => {
+  const scope = window as unknown as { __babyRace?: Snapshot; __testCameraFrames: CameraSample[] };
+  scope.__testCameraFrames = [];
+  const record = () => {
+    const state = scope.__babyRace;
+    if (state?.camera && state.phase === 'racing') scope.__testCameraFrames.push({
+      time: state.time, paused: state.paused, cinematic: state.cinematic !== null, camera: { ...state.camera },
+    });
+    if (scope.__testCameraFrames.length > 6000) scope.__testCameraFrames.shift();
+    requestAnimationFrame(record);
+  };
+  requestAnimationFrame(record);
+});
 const labelsDoNotOverlap = async (page: Page) => {
   const boxes = await Promise.all([0, 1, 2, 3].map(id => page.locator(`#label-${id}`).boundingBox()));
   for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
@@ -58,12 +79,13 @@ test('a pending decorative font stylesheet does not block game boot', async ({ p
   }
 });
 
-test('solo race supports four babies, chaos, pause, discoveries, result and replay', async ({ page }) => {
-  test.setTimeout(180_000);
+test('normal race shows early frozen closeups, resumes smoothly, finishes and replays', async ({ page }) => {
+  test.setTimeout(240_000);
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   // Keep event scheduling repeatable while exercising the real race and renderer.
   await page.addInitScript(() => { Date.now = () => 20261022; });
+  await observeCamera(page);
   await openGame(page);
   const initial = await snapshot(page);
   expect(initial.babies).toHaveLength(4);
@@ -74,7 +96,7 @@ test('solo race supports four babies, chaos, pause, discoveries, result and repl
   await expect(page.locator('.event-entry')).toHaveCount(24);
   await expect(page.locator('.event-entry.undiscovered')).toHaveCount(24);
   await page.locator('#catalog-close').click();
-  await page.locator('[data-mode="chaos"]').click();
+  await page.locator('[data-mode="normal"]').click();
   await page.locator('#help-button').click();
   await expect(page.locator('#help')).toBeVisible();
   await page.locator('#help-close').click();
@@ -88,9 +110,6 @@ test('solo race supports four babies, chaos, pause, discoveries, result and repl
   const pointerBefore = (await snapshot(page)).rattles[0].x;
   await page.mouse.click(960, 370);
   expect(Math.abs((await snapshot(page)).rattles[0].x - pointerBefore)).toBeGreaterThan(.2);
-  await page.locator('#super-button').click();
-  expect((await snapshot(page)).babies[0].superUsed).toBe(true);
-  await expect(page.locator('#super-button')).toBeDisabled();
   await page.keyboard.press('Escape');
   const paused = await snapshot(page);
   expect(paused.paused).toBe(true);
@@ -98,22 +117,69 @@ test('solo race supports four babies, chaos, pause, discoveries, result and repl
   expect((await snapshot(page)).time).toBe(paused.time);
   await page.locator('#resume-button').click();
   await page.screenshot({ path: 'test-results/racing-desktop.png' });
-  await expect.poll(async () => (await snapshot(page)).babies.some(baby => baby.eventId?.startsWith('S')), { timeout: 25_000, intervals: [150] }).toBe(true);
-  await page.screenshot({ path: 'test-results/legendary-desktop.png' });
-  await expect(page.locator('#result')).toBeVisible({ timeout: 150_000 });
+  await expect.poll(async () => (await snapshot(page)).cinematic?.eventId.startsWith('R'), { timeout: 40_000, intervals: [100] }).toBe(true);
+  const shot = await snapshot(page);
+  expect(shot.time).toBeLessThanOrEqual(14);
+  expect(shot.paused).toBe(false);
+  expect(shot.babies.every(baby => Number.isFinite(baby.stateTime))).toBe(true);
+  await expect.poll(async () => (await snapshot(page)).cinematic?.elapsed ?? -1).toBeGreaterThan(shot.cinematic!.elapsed);
+  expect(frozenValues(await snapshot(page))).toEqual(frozenValues(shot));
+  await page.keyboard.press('Escape');
+  const pausedShot = await snapshot(page);
+  expect(pausedShot.paused).toBe(true);
+  await page.waitForTimeout(250);
+  expect((await snapshot(page)).cinematic).toEqual(pausedShot.cinematic);
+  expect(frozenValues(await snapshot(page))).toEqual(frozenValues(pausedShot));
+  await page.locator('#resume-button').click();
+  const blocked = await snapshot(page);
+  await page.keyboard.down('w');
+  await page.keyboard.press('Space');
+  await page.keyboard.press('r');
+  await page.mouse.click(980, 400);
+  await page.waitForTimeout(120);
+  await page.keyboard.up('w');
+  expect(frozenValues(await snapshot(page))).toEqual(frozenValues(blocked));
+  await expect.poll(async () => (await snapshot(page)).cinematic?.phase, { intervals: [100] }).toBe('hold');
+  await expect(page.locator('#cinematic')).toBeVisible();
+  await expect(page.locator('#cinematic-title')).not.toHaveText('');
+  await expect(page.locator('#cinematic-player')).not.toHaveText('');
+  await page.screenshot({ path: 'test-results/cinematic-rare-desktop.png' });
+  await page.locator('#cinematic-skip').click();
+  const exiting = await snapshot(page);
+  expect(exiting.cinematic?.phase).toBe('exit');
+  expect(exiting.cinematic!.amount).toBeGreaterThan(0);
+  expect(frozenValues(exiting)).toEqual(frozenValues(shot));
+  await expect.poll(async () => (await snapshot(page)).cinematic, { timeout: 10_000 }).toBeNull();
+  await expect.poll(async () => (await snapshot(page)).time).toBeGreaterThan(shot.time);
+  await page.locator('#super-button').click();
+  expect((await snapshot(page)).babies[0].superUsed).toBe(true);
+  await expect(page.locator('#super-button')).toBeDisabled();
+  await expect(page.locator('#result')).toBeVisible({ timeout: 180_000 });
   const finished = await snapshot(page);
   expect(finished.winner).not.toBeNull();
   expect(finished.discovered.length).toBeGreaterThan(0);
   await expect(page.locator('.result-row')).toHaveCount(4);
+  const cameraFrames = await page.evaluate(() => (window as unknown as { __testCameraFrames: CameraSample[] }).__testCameraFrames);
+  const cameraSteps = cameraFrames.slice(1).flatMap((frame, index) => {
+    const previous = cameraFrames[index];
+    if (frame.time < 25 || frame.time > 35 || frame.cinematic || previous.cinematic || frame.paused || previous.paused || frame.time <= previous.time) return [];
+    return [{ time: frame.time, before: previous.camera.viewHeight, after: frame.camera.viewHeight,
+      relative: Math.abs(frame.camera.viewHeight - previous.camera.viewHeight) / previous.camera.viewHeight }];
+  });
+  await writeFile('test-results/camera-continuity.json', JSON.stringify({ cameraSteps, cameraFrames }, null, 2));
+  expect(cameraSteps.length).toBeGreaterThan(10);
+  expect(Math.max(...cameraSteps.map(step => step.relative))).toBeLessThan(.06);
   await page.screenshot({ path: 'test-results/result-desktop.png' });
   await page.locator('#retry-button').click();
   const replay = await snapshot(page);
   expect(replay.phase).toBe('countdown');
   expect(replay.time).toBe(0);
   expect(replay.winner).toBeNull();
+  expect(replay.cinematic).toBeNull();
   expect(replay.babies.every(baby => !baby.superUsed)).toBe(true);
   await page.keyboard.press('Escape');
   await page.locator('#return-button').click();
+  expect((await snapshot(page)).cinematic).toBeNull();
   await page.locator('#catalog-button').click();
   await expect(page.locator('.event-entry.discovered')).toHaveCount(finished.discovered.length);
   await page.screenshot({ path: 'test-results/catalog-desktop.png' });
@@ -205,6 +271,44 @@ test('mock gamepads map the second controller independently to player two', asyn
   expect(positions(after)[0]).toEqual(positions(before)[0]);
   await page.evaluate(() => { (window as unknown as { __testPads: unknown[] }).__testPads = []; });
   await page.screenshot({ path: 'test-results/gamepad-mapping-desktop.png' });
+});
+
+test('portrait legendary closeup zooms in while the race and controls stay frozen', async ({ browser }) => {
+  test.setTimeout(100_000);
+  const context = await browser.newContext({ viewport: { width: 390, height: 690 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await page.addInitScript(() => { Date.now = () => 20261022; });
+    await openGame(page);
+    await page.locator('[data-mode="chaos"]').click();
+    await start(page);
+    const racingCamera = (await snapshot(page)).camera.viewHeight;
+    await expect.poll(async () => {
+      const state = await snapshot(page);
+      if (state.cinematic?.eventId.startsWith('R') && state.cinematic.phase !== 'exit') await page.locator('#cinematic-skip').click();
+      return state.cinematic?.eventId.startsWith('S') ?? false;
+    }, { timeout: 70_000, intervals: [150] }).toBe(true);
+    await expect.poll(async () => (await snapshot(page)).cinematic?.phase, { intervals: [100] }).toBe('hold');
+    const closeup = await snapshot(page);
+    expect(closeup.camera.viewHeight).toBeLessThan(racingCamera * .85);
+    await page.waitForTimeout(200);
+    expect(frozenValues(await snapshot(page))).toEqual(frozenValues(closeup));
+    const labelsHidden = await page.locator('#baby-labels').evaluate(element => {
+      const style = getComputedStyle(element);
+      return style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0';
+    });
+    expect(labelsHidden).toBe(true);
+    await expect(page.locator('#cinematic')).toBeVisible();
+    await expect(page.locator('#cinematic-skip')).toBeInViewport();
+    await page.screenshot({ path: 'test-results/cinematic-legendary-mobile.png' });
+    await page.locator('#cinematic-skip').tap();
+    expect((await snapshot(page)).cinematic?.phase).toBe('exit');
+    await expect.poll(async () => (await snapshot(page)).cinematic, { timeout: 10_000 }).toBeNull();
+    await expect.poll(async () => (await snapshot(page)).time).toBeGreaterThan(closeup.time);
+    expect(errors).toEqual([]);
+  } finally { await context.close(); }
 });
 
 for (const height of [844, 690]) test(`portrait 390x${height} supports setup scrolling, touch and four readable labels`, async ({ browser }) => {

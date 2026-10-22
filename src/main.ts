@@ -4,6 +4,7 @@ import { GameAudio } from './audio';
 import { createRace, startRace, updateRace, moveRattle, ringRattle, useSuper, getProgress, rankBabies, STATE_LABELS, TIME_LIMIT, type Mode } from './simulation';
 import { ACCESSORIES, ACCESSORY_LABELS, COURSES, DEFAULT_STYLES, EVENTS, ZONE_LABELS, getCourse, getEvent, type EventId } from './content';
 import { loadPreferences, savePreferences, loadRecords, saveRecords } from './preferences';
+import { CinematicDirector, type CinematicFrame } from './cinematic';
 
 const rattleIcon = `<svg viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="m18 23-8 10" stroke="currentColor" stroke-width="7" stroke-linecap="round"/><circle cx="25" cy="14" r="11" fill="currentColor"/><path d="m17 10 16 7" stroke="#fff9eb" stroke-width="4"/></svg>`;
 const esc = (text: string) => text.replace(/[&<>"']/g, char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]!));
@@ -15,6 +16,7 @@ app.innerHTML = `
   <div class="course-badge"><span id="course-name"></span><small id="course-number"></small></div>
   <div class="race-hud"><span class="timer-label">のこり</span><strong id="timer" class="timer-value">60</strong><span class="timer-unit">秒</span><div class="timer-track"><i id="timer-fill"></i></div></div>
   <div id="event-banner" class="event-banner" role="status" aria-live="polite"></div>
+  <section id="cinematic" class="cinematic-overlay" hidden aria-label="ハプニング演出" role="status"><div class="cinematic-heading"><span id="cinematic-rarity">RARE HAPPENING!</span><small>Ⅱ レースは一時停止中</small></div><div class="cinematic-copy"><span id="cinematic-player"></span><h2 id="cinematic-title"></h2><p id="cinematic-description"></p></div><button id="cinematic-skip" class="cinematic-skip">演出をスキップ <span>↗</span></button><div class="cinematic-track"><i id="cinematic-fill"></i></div></section>
   <div id="baby-labels" class="labels-overlay" aria-hidden="true">${[0,1,2,3].map(i=>`<div id="label-${i}" class="baby-label"><span class="player-tag" id="tag-${i}"></span><span id="status-${i}" class="baby-status"></span></div>`).join('')}<div id="rattle-hint" class="rattle-hint">少し前でシャカシャカ！</div></div>
   <div class="bottom-hud"><div class="player-card"><div id="player-avatar" class="player-avatar">1<span>P</span></div><div class="player-details"><div class="player-name"><label for="control-player" class="sr-only">マウス・タッチで操作するプレイヤー</label><select id="control-player" aria-label="操作するプレイヤー"></select><span id="rank">1位</span></div><div class="mood-track"><i id="mood-fill"></i></div><div id="mood-caption" class="progress-caption">いいペースで鳴らそう♪</div></div></div>
   <div class="race-progress"><span>START</span><div class="progress-line">${[0,1,2,3].map(i=>`<i id="progress-${i}" class="progress-dot">${i+1}</i>`).join('')}</div><span>GOAL ⚑</span></div>
@@ -22,7 +24,7 @@ app.innerHTML = `
   <div id="controls-hint" class="controls-hint"></div><button id="mobile-ring" class="mobile-ring" aria-label="ガラガラを鳴らす">${rattleIcon}<span>鳴らす！</span></button>
   <section id="menu" class="menu-overlay" aria-label="タイトルメニュー"><div class="menu-content"><div class="eyebrow">BABY'S FIRST GRAND PRIX</div><h1><span class="title-top">ガラガラ！<i>✦</i></span><span class="title-bottom">ハイハイレース</span></h1><div class="title-decoration"><span></span><i>●</i><i>●</i><i>●</i></div><p class="intro-copy">お願い！ そっちじゃないって！！<br><span>4体の気まぐれベビーが繰り広げる60秒。</span></p>
   <div class="mode-selector" role="group" aria-label="レースのモード"><button class="mode-option" data-mode="normal"><span class="mode-icon">☀</span><span class="mode-name" id="normal-mode-name">ひとりでレース</span><span class="mode-description">まずはここから</span></button><button class="mode-option" data-mode="chaos"><span class="mode-icon">✦</span><span class="mode-name">ハプニング大盛り</span><span class="mode-description">まさかの連続！</span></button><button class="mode-option" data-mode="skill"><span class="mode-icon">⚑</span><span class="mode-name">ガチハイハイ</span><span class="mode-description">誘導の腕だめし</span></button></div>
-  <button id="setup-button" class="setup-summary"><span id="setup-summary"></span><b>準備する ↗</b></button><button id="start-button" class="primary-button">レースをはじめる <span class="arrow">↗</span></button><p class="menu-note" id="menu-note"></p><div class="menu-links"><button id="catalog-button">ハプニングずかん <span id="catalog-count">0 / 24</span></button><span id="record-summary"></span></div></div><div class="menu-scene-tag"><span class="tiny-star">✦</span><span>READY, BABY?<small>速いだけじゃ、勝てない。</small></span></div><footer class="menu-footer"><span class="version">BABY RACE <b>ver. 2.0</b></span><span class="engine-tag">ちいさなレース、おおきなハプニング。</span></footer></section>
+  <button id="setup-button" class="setup-summary"><span id="setup-summary"></span><b>準備する ↗</b></button><button id="start-button" class="primary-button">レースをはじめる <span class="arrow">↗</span></button><p class="menu-note" id="menu-note"></p><div class="menu-links"><button id="catalog-button">ハプニングずかん <span id="catalog-count">0 / 24</span></button><span id="record-summary"></span></div></div><div class="menu-scene-tag"><span class="tiny-star">✦</span><span>READY, BABY?<small>速いだけじゃ、勝てない。</small></span></div><footer class="menu-footer"><span class="version">BABY RACE <b>ver. 2.1</b></span><span class="engine-tag">ちいさなレース、おおきなハプニング。</span></footer></section>
   <section id="setup" class="dialog-overlay" hidden aria-label="レースの準備"><div class="dialog-card setup-card"><div class="dialog-heading"><div><span class="eyebrow">GET READY</span><h2>みんなのレースをつくろう。</h2></div><button id="setup-close-x" class="icon-button" aria-label="準備を閉じる">×</button></div>
   <div class="setup-section"><label for="human-players">あそぶ人数</label><select id="human-players"><option value="1">ひとり ＋ CPU 3体</option><option value="2">ふたり ＋ CPU 2体</option><option value="3">3人 ＋ CPU 1体</option><option value="4">4人で対戦</option></select><p class="setup-note">同じ端末で対戦。キーボード・最大4台のゲームパッドに対応。</p></div>
   <div class="setup-section"><h3>コースをえらぶ</h3><div class="course-options">${COURSES.map((course,i)=>`<button class="course-option" data-course="${course.id}" style="--course-color:#${course.palette[0].toString(16)}"><span>COURSE 0${i+1}</span><strong>${course.name}</strong><small>${course.description}</small></button>`).join('')}</div></div>
@@ -39,9 +41,11 @@ const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElem
 let race = createRace(preferences.mode, Date.now(), preferences);
 let world: GameWorld | undefined;
 const audio = new GameAudio();
+const director = new CinematicDirector();
 let paused = false, dialogWasPaused = false, lastEvent = -1, lastPhase = race.phase, bannerUntil = 0, bannerPriority = -1, finishHandled = false;
 let lastTime = performance.now(), elapsed = 0, lastCountdown = 4, activePlayer = 0, customPlayer = 0;
 let raceDiscoveries: EventId[] = [];
+let presentedShot = '';
 const keys = new Set<string>();
 const lastRingTime = Array(4).fill(-Infinity);
 const gamepadRingHeld = Array(4).fill(false), gamepadSuperHeld = Array(4).fill(false);
@@ -99,6 +103,7 @@ function syncPhase() {
 }
 function begin() {
   if (!world) return;
+  director.reset(); presentedShot=''; syncCinematic(null);
   audio.stopCommentary(); audio.unlock(); race=createRace(preferences.mode,Date.now(),preferences); startRace(race);
   paused=false; activePlayer=0; keys.clear(); lastRingTime.fill(-Infinity); gamepadRingHeld.fill(false); gamepadSuperHeld.fill(false);
   lastEvent=-1; finishHandled=false; lastCountdown=4; bannerUntil=0; bannerPriority=-1; raceDiscoveries=[];
@@ -107,15 +112,16 @@ function begin() {
   configureRacers(); syncPhase(); (document.activeElement as HTMLElement)?.blur();
 }
 function showMenu() {
+  director.reset(); presentedShot=''; syncCinematic(null);
   audio.stopCommentary(); race=createRace(preferences.mode,Date.now(),preferences); paused=false; keys.clear();
   ['pause','result','help','setup','catalog'].forEach(id=>el(id).hidden=true);
   el('event-banner').classList.remove('visible'); configureRacers(); refreshSettings(); syncPhase(); el('start-button').focus();
 }
 function ring(id=activePlayer) {
-  if (paused || race.phase!=='racing' || id>=race.humanPlayers || elapsed-lastRingTime[id]<.1) return;
+  if (paused || director.active || race.phase!=='racing' || id>=race.humanPlayers || elapsed-lastRingTime[id]<.1) return;
   lastRingTime[id]=elapsed; audio.unlock(); if (ringRattle(race,id)) audio.ring(); el('rattle-hint').hidden=true;
 }
-function superRing(id=activePlayer) { if (paused || race.phase!=='racing' || id>=race.humanPlayers) return; audio.unlock(); if(useSuper(race,id)) audio.ring(true); }
+function superRing(id=activePlayer) { if (paused || director.active || race.phase!=='racing' || id>=race.humanPlayers) return; audio.unlock(); if(useSuper(race,id)) audio.ring(true); }
 function togglePause() {
   if (!['racing','countdown'].includes(race.phase) || !el('help').hidden) return;
   paused=!paused; keys.clear(); if(paused) audio.stopCommentary(); el('pause').hidden=!paused; if(paused) el('resume-button').focus();
@@ -142,6 +148,7 @@ el('setup-button').addEventListener('click',()=>{loadCustomFields();openDialog('
 ['setup-close','setup-close-x'].forEach(id=>el(id).addEventListener('click',()=>{updateCustom();closeDialog('setup');}));
 el('catalog-button').addEventListener('click',()=>{renderCatalog();openDialog('catalog');});el('catalog-close').addEventListener('click',()=>closeDialog('catalog'));
 el('super-button').addEventListener('click',()=>superRing()); el('mobile-ring').addEventListener('pointerdown',e=>{e.preventDefault();ring();});
+el('cinematic-skip').addEventListener('click',()=>{director.skip();audio.stopCommentary();});
 el('control-player').addEventListener('change',()=>{activePlayer=Number(el<HTMLSelectElement>('control-player').value);el('rattle-hint').hidden=false;});
 el('reload-button').addEventListener('click',()=>location.reload());
 el('sound-button').addEventListener('click',()=>{preferences.sound=audio.toggle();save();syncSound();});
@@ -154,6 +161,7 @@ window.addEventListener('keydown',e=>{
   if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement||e.target instanceof HTMLTextAreaElement)return;
   if(paused || !['countdown','racing'].includes(race.phase))return;
   if(mappings.some(map=>Object.values(map).includes(e.code)))e.preventDefault();
+  if(director.active){if(e.code==='Enter'&&!e.repeat){e.preventDefault();director.skip();audio.stopCommentary();}return;}
   keys.add(e.code);if(e.repeat)return;
   mappings.slice(0,race.humanPlayers).forEach((map,i)=>{if(e.code===map.ring)ring(i);if(e.code===map.super)superRing(i);});
 });
@@ -164,14 +172,14 @@ window.addEventListener('blur',autoPause);document.addEventListener('visibilityc
 window.addEventListener('resize',()=>world?.resize());
 if(world){
   const canvas=world.renderer.domElement;let dragging=false;
-  const movePointer=(e:PointerEvent)=>{if(paused||race.phase!=='racing'||(e.pointerType==='touch'&&!dragging))return;const point=world!.worldPoint(e.clientX,e.clientY);if(point)moveRattle(race,point.x,point.z,activePlayer);};
-  canvas.addEventListener('pointermove',movePointer);canvas.addEventListener('pointerdown',e=>{if(e.button!==0||paused||race.phase!=='racing')return;dragging=true;canvas.setPointerCapture(e.pointerId);movePointer(e);ring();e.preventDefault();});
+  const movePointer=(e:PointerEvent)=>{if(paused||director.active||race.phase!=='racing'||(e.pointerType==='touch'&&!dragging))return;const point=world!.worldPoint(e.clientX,e.clientY);if(point)moveRattle(race,point.x,point.z,activePlayer);};
+  canvas.addEventListener('pointerdown',e=>{if(e.button!==0||paused||director.active||race.phase!=='racing')return;dragging=true;canvas.setPointerCapture(e.pointerId);movePointer(e);ring();e.preventDefault();});canvas.addEventListener('pointermove',movePointer);
   canvas.addEventListener('pointerup',()=>dragging=false);canvas.addEventListener('pointercancel',()=>dragging=false);
   canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();paused=true;audio.stopCommentary();el('webgl-error').hidden=false;});
   canvas.addEventListener('webglcontextrestored',()=>{el('webgl-error').hidden=true;paused=false;});
 }
 function updateInput(dt:number){
-  if(paused||race.phase!=='racing')return;
+  if(paused||director.active||race.phase!=='racing')return;
   const pads=Array.from(navigator.getGamepads?.()??[]).filter((pad):pad is Gamepad=>!!pad&&pad.connected);
   for(let i=0;i<race.humanPlayers;i++){
     const map=mappings[i];let dx=Number(keys.has(map.right))-Number(keys.has(map.left)),dz=Number(keys.has(map.down))-Number(keys.has(map.up));
@@ -214,7 +222,7 @@ function updateUI(){
   el('mood-fill').style.width=`${Math.max(0,Math.min(100,baby.mood*100))}%`;
   el('mood-caption').textContent=baby.boredom>.6?'鳴らしすぎ！ 少し待ってみよう':baby.zone?ZONE_LABELS[baby.zone]:baby.state==='distracted'?'寄り道中！ 近くで呼ぼう':baby.attention<.2?'ベビーの少し前で鳴らしてね':'いいリズム！ その調子♪';
   el<HTMLButtonElement>('super-button').disabled=baby.superUsed||race.phase!=='racing';el('super-button').querySelector('small')!.textContent=baby.superUsed?'つかいきったよ！':`${activePlayer+1}P · ここぞの1回！`;el('super-button').querySelector('.keycap')!.textContent=['R','右⇧','U','.'][activePlayer];
-  race.babies.forEach((b,i)=>{el(`progress-${i}`).style.left=`${getProgress(b)*100}%`;el(`progress-${i}`).style.top=`${(i-1.5)*5}px`;el(`status-${i}`).textContent=`${b.eventId?getEvent(b.eventId).name:STATE_LABELS[b.state]}${b.isCpu?'':b.superUsed?'':' ✦'}`;el(`label-${i}`).classList.toggle('awakened',b.eventId?.startsWith('S')??false);});positionLabels();
+  race.babies.forEach((b,i)=>{el(`progress-${i}`).style.left=`${getProgress(b)*100}%`;el(`progress-${i}`).style.top=`${(i-1.5)*5}px`;el(`status-${i}`).textContent=`${b.eventId?getEvent(b.eventId).name:STATE_LABELS[b.state]}${b.isCpu?'':b.superUsed?'':' ✦'}`;el(`label-${i}`).classList.toggle('awakened',b.eventId?.startsWith('S')??false);});if(!director.active)positionLabels();
   if(world){const r=race.rattles[activePlayer],p=world.screenPoint(r.x,1.8,r.z);el('rattle-hint').style.transform=`translate(${p.x}px,${p.y}px) translate(-50%,-100%)`;}
   const priority=(kind:string)=>kind==='legendary'?3:['super','rare','finish'].includes(kind)?2:kind==='good'?0:1;
   const pending=race.events.filter(event=>event.id>lastEvent);
@@ -222,12 +230,41 @@ function updateUI(){
   pending.sort((a,b)=>priority(b.kind)-priority(a.kind)||b.id-a.id);const event=pending[0];if(event)lastEvent=Math.max(...race.events.map(e=>e.id));
   if(event&&(elapsed>=bannerUntil||priority(event.kind)>=bannerPriority)){
     bannerPriority=priority(event.kind);el('event-banner').textContent=['start','finish'].includes(event.kind)?event.text:`${playerLabel(event.babyId)}！ ${event.text}`;el('event-banner').classList.add('visible');el('event-banner').classList.toggle('special',/legendary|super|rare/.test(event.kind));bannerUntil=elapsed+(event.kind==='legendary'?2.8:2.1);
-    if(event.eventId)audio.event(event.eventId,playerLabel(event.babyId),priority(event.kind));
+    if(event.eventId&&getEvent(event.eventId).rarity==='normal')audio.event(event.eventId,playerLabel(event.babyId),priority(event.kind));
     if(event.kind==='legendary'){const b=race.babies[event.babyId];if(b)world?.confetti(b.x,b.z,20);}
   }
   if(elapsed>bannerUntil)el('event-banner').classList.remove('visible');if(race.phase==='finished'&&!finishHandled)finish();
 }
-function frame(now:number){const dt=Math.min((now-lastTime)/1000,.1);lastTime=now;if(!paused){elapsed+=dt;updateInput(dt);updateRace(race,dt);}world?.update(race,elapsed,paused?0:dt);updateUI();requestAnimationFrame(frame);}
+function syncCinematic(shot: CinematicFrame|null) {
+  el('cinematic').hidden=!shot;
+  document.body.dataset.cinematic=String(!!shot);
+  if(!shot){presentedShot='';return;}
+  const key=`${shot.eventId}:${shot.babyId}:${race.time}`;
+  if(key!==presentedShot){
+    presentedShot=key;keys.clear();audio.stopCommentary();
+    const definition=getEvent(shot.eventId),baby=race.babies[shot.babyId];
+    el('cinematic-player').textContent=`${playerLabel(shot.babyId)} · ${baby.name}`;
+    el('cinematic-title').textContent=definition.name;
+    el('cinematic-description').textContent=definition.description;
+    el('cinematic-rarity').textContent=definition.rarity==='legendary'?'BABY AWAKENING!':'RARE HAPPENING!';
+    el('cinematic').classList.toggle('legendary',definition.rarity==='legendary');
+    audio.event(shot.eventId,playerLabel(shot.babyId));
+  }
+  el('cinematic-fill').style.width=`${shot.elapsed/shot.duration*100}%`;
+}
+function syncHeldGamepads() {
+  const pads=Array.from(navigator.getGamepads?.()??[]).filter((pad):pad is Gamepad=>!!pad&&pad.connected);
+  for(let i=0;i<4;i++){gamepadRingHeld[i]=!!pads[i]?.buttons[0]?.pressed;gamepadSuperHeld[i]=!!pads[i]?.buttons[5]?.pressed;}
+}
+function frame(now:number){
+  const dt=Math.max(0,Math.min((now-lastTime)/1000,.1));lastTime=now;
+  if(!paused){
+    if(director.active){director.advance(dt);syncHeldGamepads();}
+    else{elapsed+=dt;updateInput(dt);updateRace(race,dt);director.observe(race.events,race.phase==='racing');}
+  }
+  const shot=director.frame;syncCinematic(shot);
+  world?.update(race,elapsed,paused?0:dt,shot);updateUI();requestAnimationFrame(frame);
+}
 configureRacers();loadCustomFields();syncSound();syncPhase();requestAnimationFrame(frame);
 window.addEventListener('pagehide',()=>audio.dispose(),{once:true});
-Object.defineProperty(window,'__babyRace',{get:()=>({phase:race.phase,mode:race.mode,courseId:race.courseId,humanPlayers:race.humanPlayers,time:race.time,paused,babies:race.babies.map(b=>({id:b.id,name:b.name,isCpu:b.isCpu,style:{...b.style},x:b.x,z:b.z,state:b.state,eventId:b.eventId,zone:b.zone,progress:getProgress(b),superUsed:b.superUsed})),rattles:race.rattles.map(r=>({...r})),winner:race.winner,events:race.events.map(e=>({text:e.text,kind:e.kind,eventId:e.eventId})),discovered:[...records.seen]})});
+Object.defineProperty(window,'__babyRace',{get:()=>({phase:race.phase,mode:race.mode,courseId:race.courseId,humanPlayers:race.humanPlayers,time:race.time,paused,cinematic:director.frame,camera:world?{viewHeight:world.viewHeight,x:world.camera.position.x,y:world.camera.position.y,z:world.camera.position.z}:null,babies:race.babies.map(b=>({id:b.id,name:b.name,isCpu:b.isCpu,style:{...b.style},x:b.x,z:b.z,state:b.state,stateTime:b.stateTime,eventId:b.eventId,zone:b.zone,progress:getProgress(b),superUsed:b.superUsed})),rattles:race.rattles.map(r=>({...r})),winner:race.winner,events:race.events.map(e=>({text:e.text,kind:e.kind,eventId:e.eventId})),discovered:[...records.seen]})});

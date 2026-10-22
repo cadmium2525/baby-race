@@ -52,6 +52,7 @@ interface Runtime {
   distraction: { x: number; z: number }[]; targetBaby: (number | null)[]; effectElapsed: number[];
   superUntil: number[]; cpuRing: number[]; cpuSuper: number[]; zoneIndex: number[];
   rareCursor: number; rareCount: number; nextRare: number; legendaryCursor: number; nextLegendary: number;
+  pendingFinishPose: boolean;
 }
 // Rendering cannot consume random draws or advance AI clocks.
 const runtimes = new WeakMap<RaceState, Runtime>();
@@ -95,15 +96,16 @@ export function createRace(mode: Mode = 'normal', seed = 20261022, options: Race
     nextGroove: babies.map((_, id) => 3 + id), nextBored: all(0),
     distraction: babies.map(b => ({ x: b.x, z: b.z })), targetBaby: babies.map(() => null), effectElapsed: all(0),
     superUntil: all(-1), cpuRing: babies.map((_, id) => 0.2 + id * 0.12), cpuSuper: all(0), zoneIndex: all(-1),
-    rareCursor: 0, rareCount: 0, nextRare: 16, legendaryCursor: 0, nextLegendary: Infinity,
+    rareCursor: 0, rareCount: 0, nextRare: 16, legendaryCursor: 0, nextLegendary: Infinity, pendingFinishPose: false,
   };
   rt.normalCursor = babies.map(() => Math.floor(random(rt) * NORMAL_EVENTS.length));
   rt.cpuSuper = babies.map((_, id) => 25 + id + random(rt) * 7);
   rt.rareCursor = Math.floor(random(rt) * RARE_EVENTS.length);
   rt.legendaryCursor = Math.floor(random(rt) * LEGENDARY_EVENTS.length);
-  rt.nextRare += random(rt) * 3;
-  if (mode === 'chaos') rt.nextLegendary = 11 + random(rt) * 3;
-  else if (mode === 'normal' && random(rt) < 0.28) rt.nextLegendary = 24 + random(rt) * 10;
+  if (mode !== 'skill') rt.nextNormal = babies.map(() => (mode === 'chaos' ? 3 : 4) + random(rt) * 2);
+  rt.nextRare = mode === 'chaos' ? 6 + random(rt) * 2 : mode === 'normal' ? 9 + random(rt) * 3 : 16 + random(rt) * 3;
+  if (mode === 'chaos') rt.nextLegendary = 8 + random(rt) * 3;
+  else if (mode === 'normal' && random(rt) < 0.5) rt.nextLegendary = 18 + random(rt) * 10;
   runtimes.set(state, rt);
   return state;
 }
@@ -122,7 +124,9 @@ function notify(state: RaceState, baby: Baby, text: string, kind = 'normal', eve
   const rt = runtime(state);
   baby.event = text;
   state.events.unshift({ id: ++rt.notificationId, babyId: baby.id, text, kind, time: state.time, ...(eventId ? { eventId } : {}) });
-  state.events.length = Math.min(state.events.length, 6);
+  // Four simultaneous racers and contagion can produce several notifications in
+  // one tick. Retain enough history for the UI director to observe every effect.
+  state.events.length = Math.min(state.events.length, 24);
 }
 function setState(baby: Baby, value: BabyState, seconds = 0): void {
   baby.state = value; baby.stateTime = seconds; baby.eventId = null;
@@ -282,26 +286,48 @@ function updateSchedules(state: RaceState): void {
     const eventId = NORMAL_EVENTS[rt.normalCursor[baby.id] % NORMAL_EVENTS.length];
     if (triggerEvent(state, eventId, baby.id)) {
       rt.normalCursor[baby.id] += 1;
-      rt.nextNormal[baby.id] = state.time + (state.mode === 'chaos' ? 8 : 14) + random(rt) * 4;
+      const interval = state.mode === 'chaos' ? 7 + random(rt) * 3 : state.mode === 'normal' ? 10 + random(rt) * 3 : 14 + random(rt) * 4;
+      rt.nextNormal[baby.id] = state.time + interval;
     } else rt.nextNormal[baby.id] = state.time + 0.8;
   }
   if (state.time >= rt.nextRare) {
-    const choices = state.babies.filter(b => b.finishedAt === null && !b.eventId && state.time >= rt.eventReady[b.id]);
-    const baby = choices[Math.floor(random(rt) * choices.length)], eventId = RARE_EVENTS[rt.rareCursor % RARE_EVENTS.length];
+    const eventId = RARE_EVENTS[rt.rareCursor % RARE_EVENTS.length];
+    const choices = scheduledChoices(state, eventId);
+    const baby = choices[Math.floor(random(rt) * choices.length)];
     if (baby && triggerEvent(state, eventId, baby.id)) {
       rt.rareCursor += 1; rt.rareCount += 1;
-      rt.nextRare = state.mode !== 'chaos' && rt.rareCount >= 2 ? Infinity : state.time + (state.mode === 'chaos' ? 8 : 18) + random(rt) * 3;
+      const cap = state.mode === 'chaos' ? 6 : state.mode === 'normal' ? 3 : 2;
+      const interval = state.mode === 'chaos' ? 7 + random(rt) * 3 : state.mode === 'normal' ? 12 + random(rt) * 4 : 18 + random(rt) * 3;
+      rt.nextRare = rt.rareCount >= cap ? Infinity : state.time + interval;
     } else rt.nextRare = state.time + 0.8;
   }
   if (state.time >= rt.nextLegendary) {
-    const eventId = LEGENDARY_EVENTS[rt.legendaryCursor % LEGENDARY_EVENTS.length];
-    const choices = state.babies.filter(b => b.finishedAt === null && !b.eventId && state.time >= rt.eventReady[b.id] && (eventId !== 'S08' || b.z < GOAL_Z + 6));
+    // A finish-line pose must not block every other legendary event early in a
+    // race. Defer it to a later chaos slot and show an eligible effect now.
+    const deferredChoices = rt.pendingFinishPose ? scheduledChoices(state, 'S08') : [];
+    const servingDeferred = deferredChoices.length > 0;
+    let eventId = servingDeferred ? 'S08' as EventId : LEGENDARY_EVENTS[rt.legendaryCursor % LEGENDARY_EVENTS.length];
+    let choices = servingDeferred ? deferredChoices : scheduledChoices(state, eventId);
+    if (eventId === 'S08' && !choices.length) {
+      rt.pendingFinishPose = true;
+      rt.legendaryCursor += 1;
+      eventId = LEGENDARY_EVENTS[rt.legendaryCursor % LEGENDARY_EVENTS.length];
+      choices = scheduledChoices(state, eventId);
+    }
     const baby = choices[Math.floor(random(rt) * choices.length)];
     if (baby && triggerEvent(state, eventId, baby.id)) {
-      rt.legendaryCursor += 1;
-      rt.nextLegendary = state.mode === 'chaos' ? state.time + 16 + random(rt) * 3 : Infinity;
+      if (!servingDeferred) rt.legendaryCursor += 1;
+      if (eventId === 'S08') rt.pendingFinishPose = false;
+      rt.nextLegendary = state.mode === 'chaos' ? state.time + 14 + random(rt) * 4 : Infinity;
     } else rt.nextLegendary = state.time + 0.8;
   }
+}
+function scheduledChoices(state: RaceState, eventId: EventId): Baby[] {
+  const rt = runtime(state);
+  return state.babies.filter(baby => baby.finishedAt === null && !baby.eventId && state.time >= rt.eventReady[baby.id] &&
+    (!NEGATIVE.has(eventId) || state.time - rt.lastNegative[baby.id] >= 7) &&
+    (!eventId.startsWith('S') || state.time >= rt.specialReady[baby.id]) &&
+    (eventId !== 'S08' || baby.z < GOAL_Z + 6));
 }
 function updateBaby(state: RaceState, baby: Baby, dt: number, lastPlaceId: number, leadingProgress: number): void {
   if (baby.finishedAt !== null) return;

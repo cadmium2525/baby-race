@@ -442,10 +442,39 @@ body[data-phase='ready'] .menu-footer { pointer-events: none; }
 #commentary-button[aria-pressed='true'] { color: #71558f; background: #e7dbf2; }
 #sound-button[aria-pressed='true'] { opacity: .5; }
 
+.cinematic-overlay { position: absolute; inset: 0; z-index: 24; pointer-events: none; color: #77608d; background: radial-gradient(ellipse at 50% 42%, transparent 34%, #6e527c22 100%); box-shadow: inset 0 9px #ac91cbb3, inset 0 -9px #ac91cbb3; }
+.cinematic-overlay.legendary { color: #977227; box-shadow: inset 0 9px #dfc572b3, inset 0 -9px #dfc572b3; }
+.cinematic-heading { position: absolute; top: 105px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 9px; white-space: nowrap; }
+.cinematic-heading > span { padding: 8px 20px; border: 1px solid #d6c4e7; border-radius: 30px; background: #fffcf4e8; font: 700 12px 'DM Sans',sans-serif; letter-spacing: .22em; box-shadow: 0 3px 18px #80639315; }
+.legendary .cinematic-heading > span { border-color: #e4cd82; background: #fff8ddec; }
+.cinematic-heading small { padding: 4px 11px; color: #796b82; background: #fffcf4d9; border-radius: 20px; font-size: 10px; }
+.cinematic-copy { position: absolute; bottom: 85px; left: 50%; transform: translateX(-50%); width: min(850px,85%); text-align: center; text-shadow: 0 2px 0 #fffdf7, 0 0 14px #fffdf7; }
+.cinematic-copy > span { display: inline-block; margin-bottom: 7px; padding: 5px 15px; background: #fffcf4e8; border: 1px solid #e8dcee; border-radius: 25px; font-size: 12px; font-weight: 700; }
+.cinematic-copy h2 { font-size: clamp(30px,4.2vw,54px); font-weight: 900; line-height: 1.3; letter-spacing: -.03em; }
+.cinematic-copy p { margin-top: 8px; color: #75627d; font-size: 13px; font-weight: 700; line-height: 1.7; }
+.cinematic-skip { position: absolute; right: 35px; bottom: 28px; min-height: 36px; display: flex; align-items: center; gap: 18px; padding: 8px 15px; border: 1px solid #d5c7dc; border-radius: 22px; background: #fffcf4e8; font-size: 11px; color: #8b739b; pointer-events: auto; }
+.cinematic-skip:hover { background: #fffdf8; }
+.cinematic-skip span { font-size: 17px; }
+.cinematic-track { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: #e5d9ed; }
+.cinematic-track i { display: block; height: 100%; width: 0; background: #a38abd; }
+.legendary .cinematic-track i { background: #d6b659; }
+body[data-cinematic='true'] .race-hud, body[data-cinematic='true'] .course-badge,
+body[data-cinematic='true'] .labels-overlay, body[data-cinematic='true'] .bottom-hud,
+body[data-cinematic='true'] .event-banner, body[data-cinematic='true'] .mobile-ring,
+body[data-cinematic='true'] .controls-hint { visibility: hidden !important; }
+
 @media (min-width: 761px) and (max-width: 1050px) {
   .setup-summary, .menu-links { width: 370px; }
 }
 @media (max-width: 760px) {
+  .cinematic-heading { top: calc(74px + env(safe-area-inset-top)); gap: 7px; }
+  .cinematic-heading > span { font-size: 10px; padding: 7px 15px; letter-spacing: .16em; }
+  .cinematic-heading small { font-size: 9px; }
+  .cinematic-copy { bottom: calc(83px + env(safe-area-inset-bottom)); width: 90%; }
+  .cinematic-copy h2 { font-size: 29px; }
+  .cinematic-copy > span { font-size: 10px; }
+  .cinematic-copy p { font-size: 11px; margin-top: 7px; padding: 0 8px; }
+  .cinematic-skip { bottom: calc(23px + env(safe-area-inset-bottom)); right: 20px; font-size: 10px; min-height: 36px; }
   .menu-content { max-height: none; overflow: visible; padding: 0; margin-top: 88px; margin-bottom: 60px; }
   .mode-selector { margin-top: clamp(72px,11dvh,105px); }
   .setup-summary { width: 100%; margin-top: 10px; padding: 8px 10px; font-size: 9px; }
@@ -500,6 +529,13 @@ body[data-phase='ready'] .menu-footer { pointer-events: none; }
   .setup-summary { margin-top: 8px; padding: 6px 8px; }
 }
 @media (max-width: 760px) and (orientation: landscape) {
+  .cinematic-heading { top: 68px; }
+  .cinematic-heading small { display: none; }
+  .cinematic-copy { bottom: 44px; width: 70%; }
+  .cinematic-copy h2 { font-size: 23px; }
+  .cinematic-copy p { font-size: 9px; }
+  .cinematic-copy > span { font-size: 8px; margin-bottom: 4px; }
+  .cinematic-skip { bottom: 13px; right: 15px; }
   .menu-content { margin: 74px 0 50px 30px; width: 330px; }
   .mode-selector { margin-top: 14px; }
   .menu-links { margin-top: 5px; }

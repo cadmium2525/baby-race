@@ -195,9 +195,9 @@ test('all three CPUs guide independently, reach the finish, and remain in bounds
   assert.equal(state.babies.length, 4);
   assert.equal(state.babies.filter(baby => baby.isCpu).length, 3);
   for (const baby of state.babies.slice(1)) {
-    assert.ok(getProgress(baby) > 0.1);
+    assert.ok(getProgress(baby) > 0.06);
     assert.notEqual(state.rattles[baby.id].z, initialTargets[baby.id].z);
-    assert.ok(baby.attention > 0.4);
+    assert.ok(baby.attention > 0.4 || baby.eventId === 'N05');
   }
   assert.deepEqual(state.rattles[0], initialTargets[0]);
   updateRace(state, 60);
@@ -281,7 +281,7 @@ for (const definition of EVENTS) {
     assert.ok(baby.stateTime > 0 && baby.stateTime <= 4);
     assert.equal(state.events[0].eventId, definition.id);
     assert.equal(triggerEvent(state, definition.id), false);
-    updateRace(state, 5);
+    updateRace(state, baby.stateTime + 0.02);
     assert.equal(baby.eventId, null);
     assert.equal(baby.awakeningPhase, undefined);
     assert.notEqual(baby.state, 'awakening');
@@ -294,7 +294,7 @@ test('event guards enforce phase, negative-event spacing, special cooldown, and 
   assert.equal(triggerEvent(ready, 'R01'), false);
   startRace(ready);
   assert.equal(triggerEvent(ready, 'N03'), false);
-  const ordinary = racing('normal', 8, { humanPlayers: 4 });
+  const ordinary = racing('skill', 8, { humanPlayers: 4 });
   assert.equal(triggerEvent(ordinary, 'N03'), true);
   updateRace(ordinary, 2);
   assert.equal(ordinary.babies[0].eventId, null);
@@ -303,7 +303,8 @@ test('event guards enforce phase, negative-event spacing, special cooldown, and 
   assert.equal(triggerEvent(ordinary, 'N01'), true);
   const special = racing('normal', 8, { humanPlayers: 4 });
   assert.equal(triggerEvent(special, 'S06'), true);
-  updateRace(special, 6);
+  updateRace(special, 3.2);
+  special.time = 6;
   assert.equal(triggerEvent(special, 'S02'), false);
   // Advancing the public race clock isolates the cooldown from future scheduling.
   special.time = 18;
@@ -442,7 +443,7 @@ test('every catalog event can be reached through seeded natural race schedules',
   assert.deepEqual([...encountered].sort(), EVENTS.map(event => event.id).sort());
 });
 
-test('normal races cap rare schedules at two and legendary schedules at one; skill never schedules legendary', () => {
+test('normal races cap rare schedules at three and legendary schedules at one; skill never schedules legendary', () => {
   let racesWithLegendary = 0;
   for (let seed = 0; seed < 32; seed++) {
     const state = racing('normal', seed);
@@ -454,14 +455,113 @@ test('normal races cap rare schedules at two and legendary schedules at one; ski
         if (event.eventId?.startsWith('S')) legendaryOccurrences.add(`${event.eventId}:${event.time}`);
       }
     }
-    assert.ok(rareOccurrences.size >= 1 && rareOccurrences.size <= 2);
+    assert.ok(rareOccurrences.size >= 2 && rareOccurrences.size <= 3);
     assert.ok(legendaryOccurrences.size <= 1);
     if (legendaryOccurrences.size) racesWithLegendary++;
   }
-  assert.ok(racesWithLegendary > 0 && racesWithLegendary < 16);
+  assert.ok(racesWithLegendary >= 8 && racesWithLegendary <= 24);
   const skill = racing('skill', 4);
   while (skill.phase === 'racing') {
     updateRace(skill, 0.5);
     assert.ok(skill.events.every(event => !event.eventId?.startsWith('S')));
   }
+});
+
+function collectRace(mode: Mode, seed: number): { state: RaceState; notifications: RaceState['events'] } {
+  const state = racing(mode, seed);
+  const seen = new Set<number>();
+  const notifications: RaceState['events'] = [];
+  let lastCall = -1;
+  while (state.phase === 'racing') {
+    const baby = state.babies[0];
+    moveRattle(state, baby.x, baby.z - 3);
+    const second = Math.floor(state.time + 1e-7);
+    if (second !== lastCall) { ringRattle(state); lastCall = second; }
+    updateRace(state, 0.25);
+    for (const event of state.events) if (!seen.has(event.id)) {
+      seen.add(event.id);
+      notifications.push(event);
+    }
+  }
+  return { state, notifications: notifications.sort((a, b) => a.id - b.id) };
+}
+
+test('normal accidents arrive in the opening seconds and remain lively, while chaos is busier', () => {
+  let normalOrdinary = 0, normalHuman = 0, normalRare = 0, chaosOrdinary = 0, chaosRare = 0;
+  let normalLegendaryRaces = 0;
+  const negative = new Set<EventId>(['N01','N02','N03','N04','N05','N06','N07','N08','R03','R05','R06','R07','S05','S08']);
+  for (let seed = 0; seed < 32; seed++) {
+    for (const mode of ['normal', 'chaos'] as const) {
+      const { state, notifications } = collectRace(mode, seed);
+      const ordinary = notifications.filter(event => event.eventId?.startsWith('N'));
+      const occurrences = (prefix: string) => [...new Map(notifications.filter(event => event.eventId?.startsWith(prefix))
+        .map(event => [`${event.eventId}:${event.time}`, event])).values()];
+      const rare = occurrences('R'), legendary = occurrences('S');
+      assert.equal(state.finishReason, 'goal');
+      assert.ok(state.time > 30 && state.time < TIME_LIMIT);
+      const firstHuman = ordinary.find(event => event.babyId === 0)!;
+      if (mode === 'normal') {
+        assert.ok(firstHuman.time >= 4 && firstHuman.time < 6.05);
+        assert.ok(rare[0].time >= 9 && rare[0].time < 14);
+        assert.ok(rare.length >= 2 && rare.length <= 3);
+        assert.ok(legendary.length <= 1);
+        if (legendary.length) {
+          normalLegendaryRaces++;
+          assert.ok(legendary[0].time >= 18 && legendary[0].time < 30);
+        }
+        normalOrdinary += ordinary.length;
+        normalHuman += ordinary.filter(event => event.babyId === 0).length;
+        normalRare += rare.length;
+      } else {
+        assert.ok(firstHuman.time >= 3 && firstHuman.time < 5.05);
+        assert.ok(rare[0].time >= 6 && rare[0].time < 12);
+        assert.ok(rare.length >= 3 && rare.length <= 6);
+        // An early S08 selection must not postpone every legendary until the goal.
+        assert.ok(legendary[0].time >= 8 && legendary[0].time < 13);
+        assert.ok(legendary.length >= 2);
+        chaosOrdinary += ordinary.length;
+        chaosRare += rare.length;
+      }
+      // All affected participants get the same protection, including contagion.
+      for (let id = 0; id < 4; id++) {
+        const setbacks = notifications.filter(event => event.babyId === id && event.eventId && negative.has(event.eventId));
+        for (let i = 1; i < setbacks.length; i++) assert.ok(setbacks[i].time - setbacks[i - 1].time >= 7 - 1e-8);
+      }
+    }
+  }
+  assert.ok(normalHuman / 32 >= 3);
+  assert.ok(normalOrdinary / 32 >= 12);
+  assert.ok(normalRare / 32 >= 2.25);
+  assert.ok(normalLegendaryRaces >= 8 && normalLegendaryRaces <= 24);
+  assert.ok(chaosOrdinary > normalOrdinary * 1.15);
+  assert.ok(chaosRare > normalRare * 1.25);
+});
+
+test('notification history retains 24 entries including simultaneous rare contagion', () => {
+  const state = racing('normal', 3, { humanPlayers: 4 });
+  [0, 2, -2, 4].forEach((x, id) => { state.babies[id].x = x; });
+  assert.equal(triggerEvent(state, 'R05'), true);
+  const rareIds = state.events.filter(event => event.eventId === 'R05').map(event => event.id);
+  assert.equal(rareIds.length, 4);
+  // Produce 16 entry notifications without advancing effect durations materially.
+  for (const z of [1, -10, 1, -10]) {
+    state.babies.forEach(baby => { baby.z = z; });
+    updateRace(state, 1 / 60);
+  }
+  for (let id = 0; id < 4; id++) assert.equal(useSuper(state, id), true);
+  assert.equal(state.events.length, 24);
+  assert.ok(rareIds.every(id => state.events.some(event => event.id === id)));
+  assert.ok(state.events.every((event, index) => index === 0 || event.id < state.events[index - 1].id));
+});
+
+test('a stopped simulation preserves race time, effect duration and positions until resumed', () => {
+  const state = racing('normal', 3, { humanPlayers: 4 });
+  assert.equal(triggerAwakening(state), true);
+  updateRace(state, 0.5);
+  const paused = JSON.stringify(state);
+  for (let frame = 0; frame < 300; frame++) updateRace(state, 0);
+  assert.equal(JSON.stringify(state), paused);
+  updateRace(state, 0.2);
+  assert.equal(state.babies[0].awakeningPhase, 'run');
+  assert.ok(state.babies[0].z < START_Z);
 });

@@ -1,12 +1,12 @@
 {
   "name": "garagara-baby-race",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5174",
     "check": "tsc --noEmit",
-    "test": "tsx --test src/simulation.test.ts",
+    "test": "tsx --test src/simulation.test.ts src/camera.test.ts src/cinematic.test.ts",
     "test:browser": "playwright test",
     "build": "tsc --noEmit && node scripts/build.mjs",
     "preview": "vite preview --host 127.0.0.1 --port 4174"

@@ -3,6 +3,8 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { type RaceState, type Baby } from './simulation';
 import { DEFAULT_STYLES, getCourse, type Accessory, type BabyStyle, type CourseId, type CourseZone } from './content';
+import { dampRaceCamera, fitRaceCamera, type RaceCameraFrame } from './camera';
+import { type CinematicFrame } from './cinematic';
 
 const C = { cream: 0xf9f5e9, mint: 0xa6d7c8, pink: 0xeab7bb, yellow: 0xf4d68c, lilac: 0xc5bcdf, blue: 0xb6d9e4, ink: 0x514e55, skin: 0xf4c9a6 };
 const sphere = new THREE.SphereGeometry(1, 20, 14);
@@ -130,8 +132,15 @@ export class GameWorld {
   reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   private scenery = new THREE.Group(); private movingScenery = new THREE.Group(); private courseId: CourseId | null = null;
   private rollingBalls: {root: THREE.Group; x: number; z: number; width: number; depth: number; phase: number}[] = [];
-  private desired = new THREE.Vector3(); private cameraOffset = new THREE.Vector3(13, 20, 23);
-  private screenRight = new THREE.Vector3(23, 0, -13).normalize(); private screenUp = new THREE.Vector3(-260, 698, -460).normalize();
+  private cameraOffset = new THREE.Vector3(13, 20, 23);
+  private raceCamera: RaceCameraFrame = { x: -4.8, y: 0, z: 10.5, height: 14 };
+  private desiredCamera: RaceCameraFrame = { x: -4.8, y: 0, z: 10.5, height: 14 };
+  private savedCamera: RaceCameraFrame = { x: 0, y: 0, z: 0, height: 14 };
+  private savedRotation = new THREE.Quaternion(); private closeRotation = new THREE.Quaternion();
+  private closeTarget = new THREE.Vector3(); private closeEye = new THREE.Vector3(); private cameraUp = new THREE.Vector3(0, 1, 0);
+  private closeMatrix = new THREE.Matrix4();
+  private cutBabyId = -1; private cutEvent: CinematicFrame['eventId'] | null = null; private cutElapsed = 0;
+  private cameraInitialized = false; private materialsNeedWarmup = true;
   constructor(public container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' }); this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75)); this.renderer.setClearColor(C.cream);
     this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -143,6 +152,10 @@ export class GameWorld {
     sun.shadow.normalBias = .035; sun.shadow.bias = -.0001; sun.shadow.radius = 5; this.scene.add(sun);
     this.scene.add(this.scenery, this.movingScenery); this.buildCourse('nursery');
     this.babies.forEach(b => { b.root.scale.setScalar(1.16); this.scene.add(b.root); }); this.rattles.forEach(r => this.scene.add(r.root)); this.resize();
+    this.camera.position.copy(this.target).add(this.cameraOffset); this.camera.lookAt(this.target); this.camera.updateMatrixWorld();
+    // compile traverses hidden meshes too: rare eyebrows/speed lines and the
+    // instanced afterimages must not compile their first shader during a race.
+    this.renderer.compile(this.scene, this.camera); this.materialsNeedWarmup = false;
   }
   private bakeScenery() {
     // This traversal excludes babies, animated balls and effects on every rebuild.
@@ -197,10 +210,10 @@ export class GameWorld {
       for (let i = 0; i < 5; i++) { const ring = new THREE.Mesh(new THREE.TorusGeometry(.7 - i * .11, .15, 10, 28), material(palette[i])); ring.rotation.x = Math.PI / 2; ring.position.set(8, .18 + i * .35, -3.5); this.scenery.add(ring); } ball(this.scenery, C.yellow, [8, 2.25, -3.5], [.2, .2, .2]);
       if (id === 'toybox') { for (let i = 0; i < 4; i++) { box(this.scenery, palette[i], [8.3, .6, 8 - i * 1.65], [1, .8, 1.35], .15); for (const side of [-1, 1]) ball(this.scenery, 0x8f829c, [8.3 + side * .55, .3, 8 - i * 1.65], [.13, .22, .22]); } floorLabel(this.scenery, 'TOY PARADE', '#c294a0', -8, 12, 4); }
     }
-    this.bakeScenery();
+    this.bakeScenery(); this.materialsNeedWarmup = true;
   }
   resize() { this.width = Math.max(1, this.container.clientWidth); this.height = Math.max(1, this.container.clientHeight); this.renderer.setSize(this.width, this.height); this.updateFrustum(); }
-  private updateFrustum() { const aspect = this.width / this.height; const h = Math.max(this.viewHeight, 15.8 / aspect); this.camera.left = -h * aspect / 2; this.camera.right = h * aspect / 2; this.camera.top = h / 2; this.camera.bottom = -h / 2; this.camera.updateProjectionMatrix(); }
+  private updateFrustum() { const aspect = this.width / this.height; this.camera.left = -this.viewHeight * aspect / 2; this.camera.right = this.viewHeight * aspect / 2; this.camera.top = this.viewHeight / 2; this.camera.bottom = -this.viewHeight / 2; this.camera.updateProjectionMatrix(); }
   worldPoint(clientX: number, clientY: number) { const rect = this.renderer.domElement.getBoundingClientRect(); this.raycaster.setFromCamera(new THREE.Vector2((clientX - rect.left) / rect.width * 2 - 1, -(clientY - rect.top) / rect.height * 2 + 1), this.camera); const out = new THREE.Vector3(); return this.raycaster.ray.intersectPlane(this.ground, out); }
   screenPoint(x: number, y: number, z: number) { const p = new THREE.Vector3(x, y, z).project(this.camera); return { x: (p.x + 1) / 2 * this.width, y: (1 - p.y) / 2 * this.height, visible: p.z > -1 && p.z < 1 }; }
   confetti(x: number, z: number, count = 60) {
@@ -211,33 +224,66 @@ export class GameWorld {
     const rig = this.babies[index]; const key = `${style.color}/${style.accessory}`; if (key === rig.styleKey) return; rig.styleKey = key;
     const color = new THREE.Color(style.color).getHex(); rig.clothing.forEach(mesh => { mesh.material = material(color); }); clearObjects(rig.accessory); addAccessory(rig.accessory, style.accessory, color); rig.ghostMaterial.color.setHex(color);
     const rattle = this.rattles[index]; rattle.colored.forEach(mesh => { mesh.material = material(color); }); rattle.wave.material.color.setHex(color); rattle.range.material.color.setHex(color);
+    this.materialsNeedWarmup = true;
   }
-  update(state: RaceState, elapsed: number, dt: number) {
-    if (state.courseId !== this.courseId) this.buildCourse(state.courseId); const intro = state.phase === 'ready'; const mobile = this.width < 760;
-    if (intro) { this.desired.set(mobile ? 1.5 : -4.8, mobile ? -5.3 : 0, 10.5); this.viewHeight = mobile ? 17 : 14; }
-    else {
-      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-      for (const b of state.babies) { minX = Math.min(minX, b.x - 1.2); maxX = Math.max(maxX, b.x + 1.2); minZ = Math.min(minZ, b.z - 2); maxZ = Math.max(maxZ, b.z + 1.7); }
-      if (minZ < -12) { minX = Math.min(minX, -6.5); maxX = Math.max(maxX, 6.5); minZ = Math.min(minZ, -22.5); }
-      this.desired.set((minX + maxX) / 2, 0, (minZ + maxZ) / 2 - 1.4); const spanX = maxX - minX, spanZ = maxZ - minZ;
-      const projectedWidth = spanX * this.screenRight.x + spanZ * -this.screenRight.z; const projectedHeight = spanX * -this.screenUp.x + spanZ * -this.screenUp.z;
-      this.viewHeight = Math.max(15.5, projectedHeight + 6.8, (projectedWidth + 3) / (this.width / this.height));
+  private updateCamera(state: RaceState, dt: number, cinematic?: CinematicFrame | null) {
+    const aspect = this.width / this.height;
+    if (state.phase === 'ready') {
+      const mobile = this.width < 760;
+      this.desiredCamera.x = mobile ? 1.5 : -4.8; this.desiredCamera.y = mobile ? -5.3 : 0; this.desiredCamera.z = 10.5;
+      this.desiredCamera.height = Math.max(mobile ? 17 : 14, 15.8 / aspect);
+    } else fitRaceCamera(state.babies, aspect, this.desiredCamera);
+    if (!this.cameraInitialized) { Object.assign(this.raceCamera, this.desiredCamera); this.cameraInitialized = true; }
+    const baby = cinematic ? state.babies[cinematic.babyId] : undefined;
+    if (cinematic && baby) {
+      if (this.cutBabyId !== cinematic.babyId || this.cutEvent !== cinematic.eventId || cinematic.elapsed < this.cutElapsed) {
+        Object.assign(this.savedCamera, this.raceCamera); this.savedRotation.copy(this.camera.quaternion);
+        this.cutBabyId = cinematic.babyId; this.cutEvent = cinematic.eventId;
+      }
+      this.cutElapsed = cinematic.elapsed;
+      const amount = THREE.MathUtils.clamp(cinematic.amount, 0, 1);
+      let faceAngle = -baby.heading;
+      // These two poses deliberately look over a shoulder; S08 faces the
+      // audience. Only the camera changes, never the baby's simulation pose.
+      if (cinematic.eventId === 'S03' || cinematic.eventId === 'S05') faceAngle += Math.PI * .8;
+      else if (cinematic.eventId === 'S08') faceAngle = -2.87;
+      const frontX = -Math.sin(faceAngle), frontZ = -Math.cos(faceAngle);
+      this.closeTarget.set(baby.x + frontX * .15, cinematic.eventId === 'R02' ? .9 : 1.15, baby.z + frontZ * .15);
+      this.closeEye.set(this.closeTarget.x + frontX * 12, this.closeTarget.y + 4, this.closeTarget.z + frontZ * 12);
+      this.closeMatrix.lookAt(this.closeEye, this.closeTarget, this.cameraUp); this.closeRotation.setFromRotationMatrix(this.closeMatrix);
+      this.target.set(this.savedCamera.x, this.savedCamera.y, this.savedCamera.z).lerp(this.closeTarget, amount);
+      this.camera.quaternion.copy(this.savedRotation).slerp(this.closeRotation, amount);
+      const distance = THREE.MathUtils.lerp(this.cameraOffset.length(), Math.hypot(12, 4), amount);
+      this.camera.position.set(0, 0, distance).applyQuaternion(this.camera.quaternion).add(this.target);
+      const closeHeight = Math.max(3.45, 2.65 / aspect);
+      this.viewHeight = Math.exp(Math.log(this.savedCamera.height) + (Math.log(closeHeight) - Math.log(this.savedCamera.height)) * amount);
+    } else {
+      this.cutBabyId = -1; this.cutEvent = null; this.cutElapsed = 0;
+      dampRaceCamera(this.raceCamera, this.desiredCamera, dt, this.reducedMotion);
+      this.target.set(this.raceCamera.x, this.raceCamera.y, this.raceCamera.z); this.viewHeight = this.raceCamera.height;
+      this.camera.position.copy(this.target).add(this.cameraOffset); this.camera.lookAt(this.target);
     }
-    this.target.lerp(this.desired, this.reducedMotion ? 1 : 1 - Math.exp(-dt * (intro ? 3.2 : 4))); this.updateFrustum(); this.camera.position.copy(this.target).add(this.cameraOffset); this.camera.lookAt(this.target); this.camera.updateMatrixWorld();
+    this.updateFrustum(); this.camera.updateMatrixWorld();
+  }
+  update(state: RaceState, elapsed: number, dt: number, cinematic?: CinematicFrame | null) {
+    if (state.courseId !== this.courseId) this.buildCourse(state.courseId); const intro = state.phase === 'ready'; const mobile = this.width < 760;
     state.babies.forEach((b, i) => {
       const rig = this.babies[i]; if (!rig) return; this.applyStyle(i, b.style); rig.root.visible = true; rig.root.scale.setScalar(intro && mobile ? 1.48 : 1.16);
-      rig.root.position.set(intro ? (i % 2 ? 3 : 0) : b.x, .04, intro ? 13 - Math.floor(i / 2) * 4 - i % 2 : b.z); rig.root.rotation.set(0, intro ? -2.65 + Math.sin(elapsed * .5 + i) * .08 : -b.heading, 0); this.animateBaby(rig, b, elapsed, intro);
-      const r = this.rattles[i]; const rattle = state.rattles[i]; r.root.visible = !intro && state.phase !== 'finished'; r.root.position.set(rattle.x, .85 + Math.sin(elapsed * 3 + i) * .06, rattle.z);
+      const preview = cinematic?.babyId === i ? cinematic : undefined;
+      rig.root.position.set(intro ? (i % 2 ? 3 : 0) : b.x, .04, intro ? 13 - Math.floor(i / 2) * 4 - i % 2 : b.z); rig.root.rotation.set(0, intro ? -2.65 + Math.sin(elapsed * .5 + i) * .08 : -b.heading, 0); this.animateBaby(rig, b, elapsed + (preview?.elapsed ?? 0), intro, preview);
+      const r = this.rattles[i]; const rattle = state.rattles[i]; r.root.visible = !intro && state.phase !== 'finished' && !cinematic; r.root.position.set(rattle.x, .85 + Math.sin(elapsed * 3 + i) * .06, rattle.z);
       r.toy.rotation.z = rattle.pulse > 0 && !this.reducedMotion ? Math.sin(elapsed * 60) * .3 : -.2; const pulse = Math.max(0, rattle.pulse); r.wave.visible = pulse > 0;
       r.wave.scale.setScalar(1 + (1 - Math.min(1, pulse / .5)) * 5); r.wave.material.opacity = Math.min(.6, pulse * 1.5); r.wave.position.y = .19 - r.root.position.y;
       r.range.visible = !b.isCpu; r.range.material.opacity = state.humanPlayers === 1 ? .075 : .035; r.range.position.y = .18 - r.root.position.y; r.range.scale.setScalar(b.zone === 'echo' ? 1.6 : 1);
     });
     for (const b of this.rollingBalls) { const t = this.reducedMotion ? b.phase : elapsed * .85 + b.phase; b.root.position.set(b.x + Math.sin(t) * b.width, .58, b.z + Math.cos(t * .7) * Math.min(.25, b.depth * .08)); b.root.rotation.z = -Math.sin(t) * b.width / .4; b.root.rotation.x = t * .5; }
-    for (let i = this.effects.length - 1; i >= 0; i--) { const fx = this.effects[i]; fx.life -= dt; fx.velocity.y -= dt * 4; fx.mesh.position.addScaledVector(fx.velocity, dt); fx.mesh.rotation.x += dt * 4; fx.mesh.rotation.z += dt * 3; if (fx.life < 0 || fx.mesh.position.y < .16) { this.scene.remove(fx.mesh); this.effects.splice(i, 1); } }
+    if (!cinematic) for (let i = this.effects.length - 1; i >= 0; i--) { const fx = this.effects[i]; fx.life -= dt; fx.velocity.y -= dt * 4; fx.mesh.position.addScaledVector(fx.velocity, dt); fx.mesh.rotation.x += dt * 4; fx.mesh.rotation.z += dt * 3; if (fx.life < 0 || fx.mesh.position.y < .16) { this.scene.remove(fx.mesh); this.effects.splice(i, 1); } }
+    this.updateCamera(state, dt, cinematic);
+    if (this.materialsNeedWarmup && state.phase !== 'racing') { this.renderer.compile(this.scene, this.camera); this.materialsNeedWarmup = false; }
     this.renderer.render(this.scene, this.camera);
   }
-  private animateBaby(rig: ReturnType<typeof buildBaby>, b: Baby, time: number, intro: boolean) {
-    const event = intro ? null : b.eventId; const t = time * (b.state === 'groove' ? 14 : 8) + b.id * 2; const moving = intro || ['happy', 'groove', 'distracted', 'awakening'].includes(b.state); const motion = this.reducedMotion ? .35 : 1;
+  private animateBaby(rig: ReturnType<typeof buildBaby>, b: Baby, time: number, intro: boolean, preview?: CinematicFrame) {
+    const event = intro ? null : preview?.eventId ?? b.eventId; const t = time * (b.state === 'groove' ? 14 : 8) + b.id * 2; const moving = intro || ['happy', 'groove', 'distracted', 'awakening'].includes(b.state); const motion = this.reducedMotion ? .35 : 1;
     rig.body.rotation.set(0, 0, 0); rig.body.position.set(0, moving ? Math.sin(t * 2) * .028 * motion : 0, 0); rig.head.rotation.set(b.state === 'rest' ? .12 : 0, b.state === 'look' ? Math.sin(time * 3) * .45 : Math.sin(time * 1.5) * .04, 0);
     rig.speedLines.visible = false; rig.ghosts.visible = event === 'S06'; rig.ghostMaterial.opacity = .16 + Math.sin(time * 12) * .025 * motion;
     rig.eyes.forEach(eye => { eye.scale.y = .066; }); rig.eyebrows.forEach(brow => { brow.visible = false; }); rig.mouth.scale.set(.14, .09, .04); rig.mouth.rotation.z = 0;
@@ -263,7 +309,14 @@ export class GameWorld {
       case 'R06': rig.root.rotation.y += this.reducedMotion ? Math.sin(time * 2) * .4 : time * 8; rig.limbs[0].rotation.z = .7; rig.limbs[2].rotation.z = -.7; break;
       case 'R07': rig.head.rotation.x = -.15; rig.head.rotation.y = Math.sin(time * 2) * .45; rig.limbs[2].rotation.x = -.8; break;
       case 'R08': rig.body.rotation.x = -.1; rig.head.rotation.x = .08; fast(17, .4); rig.eyebrows.forEach((brow, i) => { brow.visible = true; brow.rotation.z = i ? .2 : -.2; }); break;
-      case 'S01': { const rise = b.awakeningPhase === 'pose' ? THREE.MathUtils.clamp((3.95 - b.stateTime) / .65, 0, 1) : b.awakeningPhase === 'landing' ? b.stateTime / .3 : 1; stand(rise); if (b.awakeningPhase === 'pose') { rig.limbs[0].rotation.set(-.6, 0, -1.5); rig.limbs[2].rotation.set(.5, 0, -.7); } else { fast(23); rig.speedLines.visible = b.awakeningPhase === 'run'; } break; }
+      case 'S01': {
+        // The race's pose timer is deliberately frozen during a cut. Preview
+        // the rise, pose and run locally, without writing to the Baby object.
+        const progress = preview ? THREE.MathUtils.clamp(preview.elapsed / preview.duration, 0, 1) : 0;
+        const phase = preview ? progress < .44 ? 'pose' : progress < .84 ? 'run' : 'landing' : b.awakeningPhase;
+        const rise = preview ? phase === 'pose' ? THREE.MathUtils.smoothstep(progress, .08, .24) : phase === 'landing' ? 1 - THREE.MathUtils.smoothstep(progress, .84, 1) : 1 : phase === 'pose' ? THREE.MathUtils.clamp((3.95 - b.stateTime) / .65, 0, 1) : phase === 'landing' ? b.stateTime / .3 : 1;
+        stand(rise); if (phase === 'pose') { rig.limbs[0].rotation.set(-.6, 0, -1.5); rig.limbs[2].rotation.set(.5, 0, -.7); } else { fast(23); rig.speedLines.visible = phase === 'run'; } break;
+      }
       case 'S02': stand(.78); rig.head.rotation.y = Math.round(Math.sin(time * 2) * 1.5) * .3; rig.limbs.forEach((limb, j) => { limb.rotation.x = Math.sign(Math.sin(time * 9 + j * Math.PI)) * .45 * motion; limb.rotation.z = j % 2 ? 0 : (j ? -.5 : .5); }); break;
       case 'S03': stand(); rig.body.rotation.z = Math.sin(time * 4) * .16 * motion; rig.head.rotation.z = -.17; rig.head.rotation.y = Math.PI * .8; rig.limbs[0].rotation.z = .8; rig.limbs[2].rotation.z = -.8; rig.limbs[1].rotation.x = Math.sin(time * 7) * .45; rig.limbs[3].rotation.x = -Math.sin(time * 7) * .45; break;
       case 'S04': rig.body.position.y = -.18; rig.body.rotation.z = Math.sin(time * 10) * .18 * motion; rig.limbs[0].rotation.x = .9; rig.limbs[2].rotation.x = .9; rig.limbs[1].rotation.x = Math.sin(time * 25) * .55; rig.limbs[3].rotation.x = -Math.sin(time * 25) * .55; rig.speedLines.visible = true; break;
