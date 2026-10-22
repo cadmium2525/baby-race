@@ -178,6 +178,34 @@ function buildHappenings(root: THREE.Group, body: THREE.Group, head: THREE.Group
   for (let i = 0; i < 7; i++) partyStars.push(sparkle(party, i % 2 ? 0xffd6f0 : 0xf6df8c, Math.sin(i * 2.4) * 1.22, .7 + i * .23, Math.cos(i * 2.4) * .55, .13).group);
   return { changing, wipes, wipe, freshDiaper, cleanDiaper, poop, cleanStars, droppedPacifier, pacifierColors, tears, tearDrops, chorus, cryBuddies, makeup, partyHair, party, disco, partyStars, phase: '', cryingCount: 0 };
 }
+interface DoublePart { source: THREE.Object3D; copy: THREE.Object3D }
+/** Clone only the ordinary baby graph. Geometry and texture ownership remains
+ * with the original; only the translucent materials belong to these doubles. */
+function buildDoubles(body: THREE.Group, head: THREE.Group, happenings: ReturnType<typeof buildHappenings>, root = new THREE.Group()) {
+  const excluded = new Set<THREE.Object3D>([happenings.cleanDiaper, happenings.tears, happenings.makeup, happenings.partyHair]);
+  const privateMaterials = new Map<THREE.Material, THREE.Material>();
+  const copies: {anchor: THREE.Group; head: THREE.Object3D; parts: DoublePart[]}[] = [];
+  const translucent = (source: THREE.Material) => {
+    let copy = privateMaterials.get(source);
+    if (!copy) { copy = source.clone(); copy.transparent = true; copy.opacity = .56; copy.depthWrite = false; privateMaterials.set(source, copy); }
+    return copy;
+  };
+  const clonePart = (source: THREE.Object3D, parts: DoublePart[]): THREE.Object3D => {
+    const copy = source.clone(false); parts.push({ source, copy });
+    if (copy instanceof THREE.Mesh) {
+      copy.material = Array.isArray(copy.material) ? copy.material.map(translucent) : translucent(copy.material);
+      copy.castShadow = false; copy.receiveShadow = false;
+    }
+    for (const child of source.children) if (!excluded.has(child)) copy.add(clonePart(child, parts));
+    return copy;
+  };
+  root.clear(); root.visible = false;
+  for (const side of [-1, 1]) {
+    const anchor = new THREE.Group(); anchor.position.set(side * 1.55, .015, .6); anchor.scale.setScalar(.88);
+    const parts: DoublePart[] = []; anchor.add(clonePart(body, parts)); root.add(anchor); copies.push({ anchor, head: parts.find(part => part.source === head)!.copy, parts });
+  }
+  return { root, copies, privateMaterials };
+}
 function buildBaby(style: BabyStyle, skin: number) {
   const color = new THREE.Color(style.color).getHex(); const root = new THREE.Group(); const body = new THREE.Group(); root.add(body);
   const clothing: THREE.Mesh[] = [ball(body, color, [0, .66, .25], [.48, .39, .64])]; ball(body, 0xfffaf1, [0, .6, .62], [.47, .36, .34]);
@@ -199,13 +227,10 @@ function buildBaby(style: BabyStyle, skin: number) {
   for (let i = 0; i < 3; i++) ball(body, 0xf8f6ed, [0, .94, -.02 + i * .2], [.04, .018, .04]);
   const speedLines = new THREE.Group(); for (let i = 0; i < 3; i++) box(speedLines, 0xfffbef, [(i - 1) * .5, .14, 1.2 + (i % 2) * .35], [.045, .035, .8 + (i % 2) * .5], .015);
   root.add(speedLines); speedLines.visible = false;
-  // Two faint silhouettes share one instanced mesh; no new geometry per frame.
-  const ghostMaterial = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .16, depthWrite: false }); const ghosts = new THREE.InstancedMesh(sphere, ghostMaterial, 12); ghosts.visible = false; ghosts.frustumCulled = false; root.add(ghosts);
-  const stamp = new THREE.Object3D(); const parts = [[0,.66,.25,.48,.39,.64],[0,1.01,-.39,.59,.58,.56],[-.5,.35,-.35,.16,.3,.17],[.5,.35,-.35,.16,.3,.17],[-.45,.3,.8,.2,.17,.27],[.45,.3,.8,.2,.17,.27]];
-  for (let ghost = 0; ghost < 2; ghost++) parts.forEach((p, i) => { stamp.position.set(p[0] + (ghost ? -.24 : .2), p[1], p[2] + .9 + ghost * .9); stamp.scale.set(p[3], p[4], p[5]); stamp.updateMatrix(); ghosts.setMatrixAt(ghost * 6 + i, stamp.matrix); });
   const happenings = buildHappenings(root, body, head, color, skin);
+  const doubles = buildDoubles(body, head, happenings); const ghosts = doubles.root; root.add(ghosts);
   const presentation = { baby: null as Baby | null, eventId: null as EventId | null, lastStateTime: 0, showcased: false, animationOffset: 0, cutElapsed: 0, inCut: false };
-  return { root, body, head, limbs, speedLines, clothing, accessory, eyes, eyeHighlights, eyebrows, mouth, pacifier, ghosts, ghostMaterial, happenings, presentation, styleKey: `${style.color}/${style.accessory}` };
+  return { root, body, head, limbs, speedLines, clothing, accessory, eyes, eyeHighlights, eyebrows, mouth, pacifier, ghosts, doubles, happenings, presentation, accessoryKind: style.accessory, styleKey: `${style.color}/${style.accessory}` };
 }
 function buildRattle(color: number) {
   const root = new THREE.Group(); const toy = new THREE.Group(); root.add(toy); const colored: THREE.Mesh[] = [];
@@ -237,6 +262,8 @@ export class GameWorld {
   private closeMatrix = new THREE.Matrix4();
   private cutBabyId = -1; private cutEvent: CinematicFrame['eventId'] | null = null; private cutElapsed = 0;
   private cameraInitialized = false; private materialsNeedWarmup = true;
+  private moodScratch = new THREE.Vector3();
+  private moodScreens = Array.from({length: 4}, () => ({ x: 0, y: 0, visible: false }));
   constructor(public container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' }); this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75)); this.renderer.setClearColor(C.cream);
     this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -250,7 +277,7 @@ export class GameWorld {
     this.babies.forEach(b => { b.root.scale.setScalar(1.16); this.scene.add(b.root); }); this.rattles.forEach(r => this.scene.add(r.root)); this.resize();
     this.camera.position.copy(this.target).add(this.cameraOffset); this.camera.lookAt(this.target); this.camera.updateMatrixWorld();
     // compile traverses hidden meshes too: rare eyebrows/speed lines and the
-    // instanced afterimages must not compile their first shader during a race.
+    // translucent doubles must not compile their first shader during a race.
     this.renderer.compile(this.scene, this.camera); this.materialsNeedWarmup = false;
   }
   private bakeScenery() {
@@ -312,13 +339,28 @@ export class GameWorld {
   private updateFrustum() { const aspect = this.width / this.height; this.camera.left = -this.viewHeight * aspect / 2; this.camera.right = this.viewHeight * aspect / 2; this.camera.top = this.viewHeight / 2; this.camera.bottom = -this.viewHeight / 2; this.camera.updateProjectionMatrix(); }
   worldPoint(clientX: number, clientY: number) { const rect = this.renderer.domElement.getBoundingClientRect(); this.raycaster.setFromCamera(new THREE.Vector2((clientX - rect.left) / rect.width * 2 - 1, -(clientY - rect.top) / rect.height * 2 + 1), this.camera); const out = new THREE.Vector3(); return this.raycaster.ray.intersectPlane(this.ground, out); }
   screenPoint(x: number, y: number, z: number) { const p = new THREE.Vector3(x, y, z).project(this.camera); return { x: (p.x + 1) / 2 * this.width, y: (1 - p.y) / 2 * this.height, visible: p.z > -1 && p.z < 1 }; }
+  /** One reusable result per original racer; no markers belong to doubles. */
+  moodPoint(index: number) {
+    const rig = this.babies[index], out = this.moodScreens[index];
+    if (!rig || !out) return { x: 0, y: 0, visible: false };
+    const height = rig.happenings.partyHair.visible ? 1.0 : rig.accessoryKind === 'bunny' ? 1.5 : rig.accessoryKind === 'crown' ? 1.15 : .82;
+    rig.head.updateWorldMatrix(true, false);
+    this.moodScratch.set(0, height, 0); rig.head.localToWorld(this.moodScratch); this.moodScratch.project(this.camera);
+    out.x = (this.moodScratch.x + 1) / 2 * this.width; out.y = (1 - this.moodScratch.y) / 2 * this.height;
+    out.visible = rig.root.visible && this.moodScratch.z > -1 && this.moodScratch.z < 1 && Math.abs(this.moodScratch.x) <= 1 && Math.abs(this.moodScratch.y) <= 1;
+    return out;
+  }
   confetti(x: number, z: number, count = 60) {
     if (this.reducedMotion) count = Math.min(count, 18);
     for (let i = 0; i < count; i++) { const mesh = new THREE.Mesh(confettiGeometry, material([C.mint, C.pink, C.yellow, C.lilac][i % 4])); mesh.position.set(x, 1.3, z); this.scene.add(mesh); this.effects.push({mesh, velocity: new THREE.Vector3((Math.random() - .5) * 5, 3 + Math.random() * 4, (Math.random() - .5) * 5), life: 3}); }
   }
   private applyStyle(index: number, style: BabyStyle) {
     const rig = this.babies[index]; const key = `${style.color}/${style.accessory}`; if (key === rig.styleKey) return; rig.styleKey = key;
-    const color = new THREE.Color(style.color).getHex(); rig.clothing.forEach(mesh => { mesh.material = material(color); }); clearObjects(rig.accessory); addAccessory(rig.accessory, style.accessory, color); rig.ghostMaterial.color.setHex(color);
+    // Remove doubles without disposing their shared original geometry.
+    rig.doubles.privateMaterials.forEach(mat => mat.dispose()); rig.ghosts.clear();
+    const color = new THREE.Color(style.color).getHex(); rig.clothing.forEach(mesh => { mesh.material = material(color); }); clearObjects(rig.accessory); addAccessory(rig.accessory, style.accessory, color);
+    rig.accessoryKind = style.accessory; rig.mouth.material = material(0xf2a9a5);
+    rig.doubles = buildDoubles(rig.body, rig.head, rig.happenings, rig.ghosts);
     const rattle = this.rattles[index]; rattle.colored.forEach(mesh => { mesh.material = material(color); }); rattle.wave.material.color.setHex(color); rattle.range.material.color.setHex(color);
     rig.happenings.pacifierColors.forEach(mesh => { mesh.material = material(color); });
     this.materialsNeedWarmup = true;
@@ -355,7 +397,7 @@ export class GameWorld {
       this.camera.quaternion.copy(this.savedRotation).slerp(this.closeRotation, amount);
       const distance = THREE.MathUtils.lerp(this.cameraOffset.length(), Math.hypot(12, 4), amount);
       this.camera.position.set(0, 0, distance).applyQuaternion(this.camera.quaternion).add(this.target);
-      const closeHeight = cinematic.eventId === 'S09' ? Math.max(THREE.MathUtils.lerp(3.0, 4.2, partyWide), THREE.MathUtils.lerp(2.65, 3.5, partyWide) / aspect)
+      const closeHeight = cinematic.eventId === 'S06' ? Math.max(3.8, 5.6 / aspect) : cinematic.eventId === 'S09' ? Math.max(THREE.MathUtils.lerp(3.0, 4.2, partyWide), THREE.MathUtils.lerp(2.65, 3.5, partyWide) / aspect)
         : cinematic.eventId === 'R10' ? Math.max(4.05, 3.35 / aspect) : cinematic.eventId === 'R09' ? Math.max(3.9, 3.25 / aspect) : Math.max(3.45, 2.65 / aspect);
       this.viewHeight = Math.exp(Math.log(this.savedCamera.height) + (Math.log(closeHeight) - Math.log(this.savedCamera.height)) * amount);
     } else {
@@ -426,7 +468,7 @@ export class GameWorld {
   private animateBaby(rig: ReturnType<typeof buildBaby>, b: Baby, time: number, intro: boolean, preview?: CinematicFrame) {
     const event = intro ? null : preview?.eventId ?? b.eventId; const t = time * (b.state === 'groove' ? 14 : 8) + b.id * 2; const moving = intro || ['happy', 'groove', 'distracted', 'awakening'].includes(b.state); const motion = this.reducedMotion ? .35 : 1;
     rig.body.rotation.set(0, 0, 0); rig.body.position.set(0, moving ? Math.sin(t * 2) * .028 * motion : 0, 0); rig.head.rotation.set(b.state === 'rest' ? .12 : 0, b.state === 'look' ? Math.sin(time * 3) * .45 : Math.sin(time * 1.5) * .04, 0);
-    rig.speedLines.visible = false; rig.ghosts.visible = event === 'S06'; rig.ghostMaterial.opacity = .16 + Math.sin(time * 12) * .025 * motion;
+    rig.speedLines.visible = false; rig.ghosts.visible = event === 'S06';
     const h = rig.happenings;
     h.changing.visible = h.poop.visible = h.cleanStars.visible = h.cleanDiaper.visible = false;
     h.droppedPacifier.visible = h.tears.visible = false;
@@ -526,12 +568,22 @@ export class GameWorld {
     }
     if (event !== 'S05') rig.speedLines.rotation.y = 0;
     if (!event && b.state === 'awakening') { stand(); fast(23); rig.speedLines.visible = b.awakeningPhase === 'run'; }
+    if (rig.ghosts.visible) for (const double of rig.doubles.copies) for (const part of double.parts) {
+      part.copy.position.copy(part.source.position); part.copy.quaternion.copy(part.source.quaternion); part.copy.scale.copy(part.source.scale); part.copy.visible = part.source.visible;
+    }
   }
   /** Read-only snapshots for QA; taking one never changes the scene or rules. */
   getHappeningDiagnostics() {
     return this.babies.map((rig, babyId) => ({
       babyId, visible: rig.root.visible, phase: rig.happenings.phase,
       showcased: rig.presentation.showcased,
+      cloneCount: rig.doubles.copies.length,
+      visibleClones: rig.root.visible && rig.ghosts.visible ? rig.doubles.copies.length : 0,
+      cloneHeads: rig.doubles.copies.map(double => {
+        double.head.getWorldPosition(this.moodScratch); this.moodScratch.project(this.camera);
+        return { x: (this.moodScratch.x + 1) / 2 * this.width, y: (1 - this.moodScratch.y) / 2 * this.height, opacity: .56,
+          visible: rig.root.visible && rig.ghosts.visible && Math.abs(this.moodScratch.x) <= 1 && Math.abs(this.moodScratch.y) <= 1 };
+      }),
       makeup: rig.happenings.makeup.visible, partyHair: rig.happenings.partyHair.visible,
       accessoryVisible: rig.accessory.visible, pacifierVisible: rig.pacifier.visible,
       pacifierDropped: rig.happenings.droppedPacifier.visible, tears: rig.happenings.tears.visible,

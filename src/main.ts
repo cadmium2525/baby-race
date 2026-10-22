@@ -1,7 +1,7 @@
 import './styles.css';
 import { GameWorld } from './world';
 import { GameAudio } from './audio';
-import { createRace, startRace, updateRace, moveRattle, ringRattle, useSuper, getProgress, rankBabies, STATE_LABELS, TIME_LIMIT, type Mode } from './simulation';
+import { createRace, startRace, updateRace, moveRattle, ringRattle, useSuper, getProgress, rankBabies, TIME_LIMIT, type Mode, type Baby } from './simulation';
 import { ACCESSORIES, ACCESSORY_LABELS, COURSES, DEFAULT_STYLES, EVENTS, ZONE_LABELS, getCourse, getEvent, type EventId } from './content';
 import { loadPreferences, savePreferences, loadRecords, saveRecords } from './preferences';
 import { CinematicDirector, type CinematicFrame } from './cinematic';
@@ -17,14 +17,14 @@ app.innerHTML = `
   <div class="race-hud"><span class="timer-label">のこり</span><strong id="timer" class="timer-value">60</strong><span class="timer-unit">秒</span><div class="timer-track"><i id="timer-fill"></i></div></div>
   <div id="event-banner" class="event-banner" role="status" aria-live="polite"></div>
   <section id="cinematic" class="cinematic-overlay" hidden aria-label="ハプニング演出" role="status"><div class="cinematic-heading"><span id="cinematic-rarity">RARE HAPPENING!</span><small>Ⅱ レースは一時停止中</small></div><div class="cinematic-copy"><span id="cinematic-player"></span><h2 id="cinematic-title"></h2><p id="cinematic-description"></p></div><button id="cinematic-skip" class="cinematic-skip">演出をスキップ <span>↗</span></button><div class="cinematic-track"><i id="cinematic-fill"></i></div></section>
-  <div id="baby-labels" class="labels-overlay" aria-hidden="true">${[0,1,2,3].map(i=>`<div id="label-${i}" class="baby-label"><span class="player-tag" id="tag-${i}"></span><span id="status-${i}" class="baby-status"></span></div>`).join('')}<div id="rattle-hint" class="rattle-hint">少し前でシャカシャカ！</div></div>
+  <div id="baby-labels" class="labels-overlay" aria-hidden="true">${[0,1,2,3].map(i=>`<span id="label-${i}" class="mood-marker"></span>`).join('')}<div id="rattle-hint" class="rattle-hint">少し前でシャカシャカ！</div></div>
   <div class="bottom-hud"><div class="player-card"><div id="player-avatar" class="player-avatar">1<span>P</span></div><div class="player-details"><div class="player-name"><label for="control-player" class="sr-only">マウス・タッチで操作するプレイヤー</label><select id="control-player" aria-label="操作するプレイヤー"></select><span id="rank">1位</span></div><div class="mood-track"><i id="mood-fill"></i></div><div id="mood-caption" class="progress-caption">いいペースで鳴らそう♪</div></div></div>
   <div class="race-progress"><span>START</span><div class="progress-line">${[0,1,2,3].map(i=>`<i id="progress-${i}" class="progress-dot">${i+1}</i>`).join('')}</div><span>GOAL ⚑</span></div>
   <button id="super-button" class="super-button"><span class="keycap">R</span><span class="super-copy"><strong>スーパーガラガラ</strong><small>ここぞの1回！</small></span><span class="super-star">✦</span></button></div>
   <div id="controls-hint" class="controls-hint"></div><button id="mobile-ring" class="mobile-ring" aria-label="ガラガラを鳴らす">${rattleIcon}<span>鳴らす！</span></button>
   <section id="menu" class="menu-overlay" aria-label="タイトルメニュー"><div class="menu-content"><div class="eyebrow">BABY'S FIRST GRAND PRIX</div><h1><span class="title-top">ガラガラ！<i>✦</i></span><span class="title-bottom">ハイハイレース</span></h1><div class="title-decoration"><span></span><i>●</i><i>●</i><i>●</i></div><p class="intro-copy">お願い！ そっちじゃないって！！<br><span>4体の気まぐれベビーが繰り広げる60秒。</span></p>
   <div class="mode-selector" role="group" aria-label="レースのモード"><button class="mode-option" data-mode="normal"><span class="mode-icon">☀</span><span class="mode-name" id="normal-mode-name">ひとりでレース</span><span class="mode-description">まずはここから</span></button><button class="mode-option" data-mode="chaos"><span class="mode-icon">✦</span><span class="mode-name">ハプニング大盛り</span><span class="mode-description">まさかの連続！</span></button><button class="mode-option" data-mode="skill"><span class="mode-icon">⚑</span><span class="mode-name">ガチハイハイ</span><span class="mode-description">誘導の腕だめし</span></button></div>
-  <button id="setup-button" class="setup-summary"><span id="setup-summary"></span><b>準備する ↗</b></button><button id="start-button" class="primary-button">レースをはじめる <span class="arrow">↗</span></button><p class="menu-note" id="menu-note"></p><div class="menu-links"><button id="catalog-button">ハプニングずかん <span id="catalog-count">0 / ${EVENTS.length}</span></button><span id="record-summary"></span></div></div><div class="menu-scene-tag"><span class="tiny-star">✦</span><span>READY, BABY?<small>速いだけじゃ、勝てない。</small></span></div><footer class="menu-footer"><span class="version">BABY RACE <b>ver. 2.2</b></span><span class="engine-tag">ちいさなレース、おおきなハプニング。</span></footer></section>
+  <button id="setup-button" class="setup-summary"><span id="setup-summary"></span><b>準備する ↗</b></button><button id="start-button" class="primary-button">レースをはじめる <span class="arrow">↗</span></button><p class="menu-note" id="menu-note"></p><div class="menu-links"><button id="catalog-button">ハプニングずかん <span id="catalog-count">0 / ${EVENTS.length}</span></button><span id="record-summary"></span></div></div><div class="menu-scene-tag"><span class="tiny-star">✦</span><span>READY, BABY?<small>速いだけじゃ、勝てない。</small></span></div><footer class="menu-footer"><span class="version">BABY RACE <b>ver. 2.3</b></span><span class="engine-tag">ちいさなレース、おおきなハプニング。</span></footer></section>
   <section id="setup" class="dialog-overlay" hidden aria-label="レースの準備"><div class="dialog-card setup-card"><div class="dialog-heading"><div><span class="eyebrow">GET READY</span><h2>みんなのレースをつくろう。</h2></div><button id="setup-close-x" class="icon-button" aria-label="準備を閉じる">×</button></div>
   <div class="setup-section"><label for="human-players">あそぶ人数</label><select id="human-players"><option value="1">ひとり ＋ CPU 3体</option><option value="2">ふたり ＋ CPU 2体</option><option value="3">3人 ＋ CPU 1体</option><option value="4">4人で対戦</option></select><p class="setup-note">同じ端末で対戦。キーボード・最大4台のゲームパッドに対応。</p></div>
   <div class="setup-section"><h3>コースをえらぶ</h3><div class="course-options">${COURSES.map((course,i)=>`<button class="course-option" data-course="${course.id}" style="--course-color:#${course.palette[0].toString(16)}"><span>COURSE 0${i+1}</span><strong>${course.name}</strong><small>${course.description}</small></button>`).join('')}</div></div>
@@ -85,8 +85,6 @@ function configureRacers() {
   el('control-player').innerHTML=race.babies.filter(b=>!b.isCpu).map(b=>`<option value="${b.id}">${b.id+1}P · ${esc(b.name)}</option>`).join('');
   el<HTMLSelectElement>('control-player').value=String(activePlayer);
   race.babies.forEach((baby,i)=>{
-    el(`label-${i}`).style.setProperty('--racer-color',baby.style.color);
-    el(`tag-${i}`).textContent=`${playerLabel(i)} · ${baby.name}`;
     el(`progress-${i}`).style.background=baby.style.color;
     el(`progress-${i}`).title=`${playerLabel(i)} · ${baby.name}`;
     el(`progress-${i}`).classList.toggle('cpu',baby.isCpu);
@@ -197,21 +195,29 @@ function finish(){
   el('discovery-summary').textContent=raceDiscoveries.length?`NEW！ ${raceDiscoveries.map(id=>getEvent(id).name).join(' / ')}`:`ずかん ${records.seen.length} / ${EVENTS.length} · 次はどんなハプニング？`;
   el('result').hidden=false;el('retry-button').focus();const baby=race.babies[winner];world?.confetti(baby.x,baby.z,80);refreshSettings();
 }
-function positionLabels(){
+function moodIndicator(baby: Baby): { glyph: string; mood: string } {
+  if(baby.eventId==='R10')return {glyph:'💧',mood:'crying'};
+  if(baby.state==='awakening')return {glyph:'✦',mood:'awake'};
+  if(baby.state==='rest')return {glyph:'z',mood:'rest'};
+  if(baby.state==='distracted')return {glyph:'!',mood:'distracted'};
+  if(baby.boredom>.65||baby.mood<.45)return {glyph:'…',mood:'grumpy'};
+  if(baby.state==='look'||baby.attention<.2)return {glyph:'?',mood:'lost'};
+  if(baby.state==='groove'||baby.mood>.95)return {glyph:'♫',mood:'groove'};
+  return {glyph:'♪',mood:'happy'};
+}
+function positionMoodMarkers(){
   if(!world)return;
-  const positions=world.babies.map(rig=>world!.screenPoint(rig.root.position.x,2.55,rig.root.position.z));
-  const widths=positions.map((_,i)=>Math.min(innerWidth<600?100:122,el(`label-${i}`).offsetWidth||100));
-  positions.forEach((pos,i)=>{pos.x=Math.max(widths[i]/2+4,Math.min(innerWidth-widths[i]/2-4,pos.x));pos.y=Math.max(innerWidth<600?205:160,Math.min(innerHeight-165,pos.y));});
-  const placed: {x:number;y:number;width:number}[]=[];
-  const minY=innerHeight<500?185:innerWidth<600?252:232,maxY=Math.max(minY+105,innerHeight-165);
-  positions.map((pos,i)=>({pos,i})).sort((a,b)=>a.pos.y-b.pos.y).forEach(({pos,i})=>{
-    const desired=Math.max(minY,Math.min(maxY,pos.y));
-    const candidates=Array.from({length:Math.ceil((maxY-minY)/52)+1},(_,n)=>minY+n*52).filter(y=>y<=maxY);
-    candidates.unshift(desired);candidates.sort((a,b)=>Math.abs(a-desired)-Math.abs(b-desired));
-    pos.y=candidates.find(y=>placed.every(other=>Math.abs(pos.x-other.x)>=(widths[i]+other.width)/2+5||Math.abs(y-other.y)>=52))??desired;
-    placed.push({x:pos.x,y:pos.y,width:widths[i]});
+  const placed:{x:number;y:number}[]=[];
+  const offsets=[[0,0],[-26,0],[26,0],[0,-26],[-26,-26],[26,-26],[0,-52]];
+  race.babies.forEach((_,i)=>{
+    const anchor=world!.moodPoint(i),marker=el(`label-${i}`);
+    marker.dataset.anchorX=anchor.x.toFixed(2);marker.dataset.anchorY=anchor.y.toFixed(2);
+    marker.hidden=race.phase!=='racing'||!anchor.visible||anchor.x<0||anchor.x>innerWidth||anchor.y<0||anchor.y>innerHeight;
+    if(marker.hidden)return;
+    const candidates=offsets.map(([dx,dy])=>({x:Math.max(14,Math.min(innerWidth-14,anchor.x+dx)),y:Math.max(26,anchor.y+dy)}));
+    const point=candidates.find(pos=>placed.every(other=>Math.abs(pos.x-other.x)>=26||Math.abs(pos.y-other.y)>=26))??candidates[0];
+    placed.push(point);marker.style.transform=`translate(${point.x}px,${point.y}px) translate(-50%,-100%)`;
   });
-  positions.forEach((pos,i)=>{el(`label-${i}`).style.transform=`translate(${pos.x}px,${pos.y}px) translate(-50%,-100%)`;el(`label-${i}`).hidden=['ready','finished'].includes(race.phase);});
 }
 function updateUI(){
   if(race.phase!==lastPhase){if(race.phase==='racing')audio.cue('start');syncPhase();lastPhase=race.phase;}
@@ -222,7 +228,7 @@ function updateUI(){
   el('mood-fill').style.width=`${Math.max(0,Math.min(100,baby.mood*100))}%`;
   el('mood-caption').textContent=baby.boredom>.6?'鳴らしすぎ！ 少し待ってみよう':baby.zone?ZONE_LABELS[baby.zone]:baby.state==='distracted'?'寄り道中！ 近くで呼ぼう':baby.attention<.2?'ベビーの少し前で鳴らしてね':'いいリズム！ その調子♪';
   el<HTMLButtonElement>('super-button').disabled=baby.superUsed||race.phase!=='racing';el('super-button').querySelector('small')!.textContent=baby.superUsed?'つかいきったよ！':`${activePlayer+1}P · ここぞの1回！`;el('super-button').querySelector('.keycap')!.textContent=['R','右⇧','U','.'][activePlayer];
-  race.babies.forEach((b,i)=>{el(`progress-${i}`).style.left=`${getProgress(b)*100}%`;el(`progress-${i}`).style.top=`${(i-1.5)*5}px`;el(`status-${i}`).textContent=`${b.eventId?getEvent(b.eventId).name:STATE_LABELS[b.state]}${b.isCpu?'':b.superUsed?'':' ✦'}`;el(`label-${i}`).classList.toggle('awakened',b.eventId?.startsWith('S')??false);});if(!director.active)positionLabels();
+  race.babies.forEach((b,i)=>{el(`progress-${i}`).style.left=`${getProgress(b)*100}%`;el(`progress-${i}`).style.top=`${(i-1.5)*5}px`;const indicator=moodIndicator(b),marker=el(`label-${i}`);marker.textContent=indicator.glyph;marker.dataset.mood=indicator.mood;});if(!director.active)positionMoodMarkers();
   if(world){const r=race.rattles[activePlayer],p=world.screenPoint(r.x,1.8,r.z);el('rattle-hint').style.transform=`translate(${p.x}px,${p.y}px) translate(-50%,-100%)`;}
   const priority=(kind:string)=>kind==='legendary'?3:['super','rare','finish'].includes(kind)?2:kind==='good'?0:1;
   const pending=race.events.filter(event=>event.id>lastEvent);

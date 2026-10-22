@@ -51,7 +51,18 @@ const observeCamera = async (page: Page) => page.addInitScript(() => {
   requestAnimationFrame(record);
 });
 const labelsDoNotOverlap = async (page: Page) => {
-  const boxes = await Promise.all([0, 1, 2, 3].map(id => page.locator(`#label-${id}`).boundingBox()));
+  if (await page.locator('#baby-labels .player-tag, #baby-labels .baby-status').count()) return false;
+  const markers = await Promise.all([0, 1, 2, 3].map(id => page.locator(`#label-${id}`).evaluate(element => {
+    const box = element.getBoundingClientRect(), marker = element as HTMLElement;
+    return { x: box.x, y: box.y, width: box.width, height: box.height, text: marker.textContent?.trim() ?? '',
+      anchorX: Number(marker.dataset.anchorX), anchorY: Number(marker.dataset.anchorY), hidden: marker.hidden };
+  })));
+  for (const marker of markers) {
+    if (marker.hidden || marker.width > 28 || marker.height > 28 || Array.from(marker.text).length !== 1) return false;
+    if (![marker.anchorX, marker.anchorY].every(Number.isFinite)) return false;
+    if (Math.hypot(marker.x + marker.width / 2 - marker.anchorX, marker.y + marker.height - marker.anchorY) > 53) return false;
+  }
+  const boxes = markers;
   for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
     const a = boxes[i], b = boxes[j];
     if (!a || !b || !(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y)) return false;
@@ -333,7 +344,7 @@ test('portrait legendary closeup zooms in while the race and controls stay froze
   } finally { await context.close(); }
 });
 
-for (const height of [844, 690]) test(`portrait 390x${height} supports setup scrolling, touch and four readable labels`, async ({ browser }) => {
+for (const height of [844, 690]) test(`portrait 390x${height} supports setup scrolling, touch and four compact mood markers`, async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 390, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
   const page = await context.newPage();
   const errors: string[] = [];
