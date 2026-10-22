@@ -377,3 +377,131 @@ body[data-phase='finished'] .mobile-ring { display: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Race preparation is kept off the playfield until opened. */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.menu-content { max-height: calc(100dvh - 160px); overflow-y: auto; scrollbar-width: thin; padding: 4px 8px 12px 0; }
+.mode-selector { margin-top: 20px; }
+.setup-summary { width: 427px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 13px; margin-top: 13px; background: #fffcf3dd; border: 1px solid #e4dce8; border-radius: 11px; text-align: left; font-size: 10px; line-height: 1.7; }
+.setup-summary span { max-width: 77%; }
+.setup-summary b { white-space: nowrap; font-size: 10px; color: #84669c; }
+#start-button { margin-top: 14px; }
+.menu-links { width: 427px; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 17px; color: var(--muted); font-size: 9px; }
+.menu-links button { padding: 6px 0; border-bottom: 1px solid #cdbbda; background: none; font-size: 11px; font-weight: 700; color: #8a709d; }
+.menu-links button span { margin-left: 7px; font-size: 10px; }
+.menu-links > span { text-align: right; }
+.setup-card, .catalog-card { width: min(760px,100%); text-align: left; padding: 30px; overscroll-behavior: contain; }
+.dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin-bottom: 24px; }
+.dialog-heading h2 { margin-top: 8px; font-size: 23px; }
+.dialog-heading .icon-button { flex-shrink: 0; font-size: 22px; }
+.setup-section { padding: 17px 0; border-top: 1px solid #eee5ec; }
+.setup-section h3, .setup-section > label { font-size: 13px; font-weight: 700; color: #75617f; }
+select, input { max-width: 100%; color: var(--ink); font: inherit; }
+.setup-section > select { float: right; margin-top: -5px; min-width: 210px; padding: 8px 12px; border: 1px solid #d4c5df; border-radius: 9px; background: #fffcf7; font-size: 12px; }
+.setup-note { margin-top: 12px; color: #8a7b8f; font-size: 10px; line-height: 1.9; clear: both; }
+.course-options { display: grid; grid-template-columns: repeat(3,1fr); gap: 9px; margin-top: 13px; }
+.course-option { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; gap: 7px; text-align: left; padding: 13px; border-radius: 12px; border: 1px solid #e1d8e6; background: linear-gradient(160deg,var(--course-color),#fffaf5 85%); }
+.course-option > span { font: 700 8px 'DM Sans',sans-serif; letter-spacing: .12em; color: #86758e; }
+.course-option strong { font-size: 11px; line-height: 1.6; }
+.course-option small { font-size: 10px; line-height: 1.7; color: #7c6a84; }
+.course-option.active { border-color: #987cad; box-shadow: 0 0 0 1px #987cad inset; }
+.custom-tabs { display: flex; gap: 8px; margin-top: 13px; }
+.custom-tabs button { flex: 1; border-radius: 9px; padding: 9px; border: 1px solid #e1d5e6; border-top: 4px solid var(--racer-color); background: #fffcf6; font-size: 11px; }
+.custom-tabs button[aria-pressed='true'] { border-bottom-color: #987bad; background: #f0e8f5; box-shadow: 0 2px 0 #987bad; }
+.custom-fields { display: grid; grid-template-columns: 1.3fr .6fr 1fr; gap: 15px; margin-top: 19px; }
+.custom-fields label { display: flex; flex-direction: column; gap: 7px; font-size: 10px; font-weight: 700; color: #807087; min-width: 0; }
+.custom-fields input:not([type='color']), .custom-fields select { width: 100%; height: 38px; border: 1px solid #ddcfe3; border-radius: 8px; background: #fffdf7; padding: 8px; font-size: 12px; }
+.custom-fields input[type='color'] { height: 38px; width: 100%; padding: 3px; border: 1px solid #ddcfe3; border-radius: 8px; background: #fffdf7; cursor: pointer; }
+.keyboard-guide { border-top: 1px solid #eee5ec; padding-top: 16px; margin-top: 8px; font-size: 11px; color: #7c6a84; line-height: 1.9; }
+.keyboard-guide summary { cursor: pointer; font-weight: 700; }
+.keyboard-guide > p { margin-top: 12px; font-size: 10px; }
+.key-grid { display: grid; grid-template-columns: 30px 1fr; gap: 7px 12px; margin-top: 13px; font-size: 10px; }
+.key-grid span:nth-child(odd) { font-weight: 900; color: #a284b4; }
+.setup-card > .primary-button { margin-top: 21px; }
+.catalog-card .dialog-heading p { margin-top: 10px; font-size: 11px; line-height: 1.8; color: #8a7b8f; }
+#catalog-list h3 { padding-top: 20px; margin-bottom: 13px; border-top: 1px solid #eadfea; color: #8b739c; font-size: 13px; }
+.event-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 22px; }
+.event-entry { min-width: 0; display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid #e7dfeb; border-radius: 12px; background: #faf6fc; }
+.event-icon { width: 35px; height: 35px; flex-shrink: 0; display: grid; place-items: center; font-size: 24px; color: #a28aba; background: #eee6f6; border-radius: 50%; }
+.event-entry small { display: block; font-size: 8px; color: #9b8ba5; }
+.event-entry strong { display: block; margin-top: 3px; font-size: 11px; }
+.event-entry p { margin-top: 5px; font-size: 9px; color: #897b91; line-height: 1.7; }
+.event-entry.undiscovered { opacity: .7; background: #f7f5f3; border-style: dashed; }
+.event-entry.undiscovered .event-icon { color: #baafbc; background: #ebe7eb; }
+.player-card { pointer-events: auto; }
+#control-player { max-width: 145px; min-width: 80px; background: none; border: 0; font-size: 11px; font-weight: 700; padding: 0 2px 0 0; cursor: pointer; }
+.progress-dot, .progress-dot.cpu { color: #4c4557; box-shadow: 0 0 0 1px #b5a8bf; }
+.baby-label { max-width: 122px; }
+.baby-label .player-tag { background: color-mix(in srgb,var(--racer-color) 28%,#fffaf3); border-color: var(--racer-color); color: #4e495b; max-width: 122px; display: block; overflow: hidden; text-overflow: ellipsis; }
+.baby-status { max-width: 130px; overflow: hidden; text-overflow: ellipsis; color: #62556c; }
+.baby-label.awakened .player-tag { background: #f5e4b0; border-color: #cfb470; }
+.discovery-summary { font-size: 10px !important; line-height: 1.8; color: #9b7aab !important; }
+.result-trophy { width: 55px; height: 55px; font-size: 30px; margin-top: 13px; }
+.result-row strong { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+body[data-phase='ready'] .menu-footer { pointer-events: none; }
+#commentary-button[aria-pressed='true'] { color: #71558f; background: #e7dbf2; }
+#sound-button[aria-pressed='true'] { opacity: .5; }
+
+@media (min-width: 761px) and (max-width: 1050px) {
+  .setup-summary, .menu-links { width: 370px; }
+}
+@media (max-width: 760px) {
+  .menu-content { max-height: none; overflow: visible; padding: 0; margin-top: 88px; margin-bottom: 60px; }
+  .mode-selector { margin-top: clamp(72px,11dvh,105px); }
+  .setup-summary { width: 100%; margin-top: 10px; padding: 8px 10px; font-size: 9px; }
+  .setup-summary b { font-size: 9px; }
+  .setup-summary span { max-width: 75%; }
+  .menu-links { width: 100%; margin-top: 9px; gap: 8px; font-size: 8px; }
+  .menu-links button { font-size: 10px; }
+  .menu-links button span { font-size: 9px; margin-left: 3px; }
+  .menu-note { margin-top: 11px; }
+  #start-button { margin-top: 12px; }
+  .top-actions { gap: 5px; }
+  .topbar { gap: 8px; }
+  .brand-copy small { font-size: 6px; }
+  .setup-card, .catalog-card { padding: 22px 18px; border-radius: 20px; max-height: calc(100dvh - 32px); }
+  .dialog-overlay { padding: 16px; }
+  .dialog-heading { gap: 8px; margin-bottom: 16px; }
+  .dialog-heading h2 { font-size: 18px; text-align: left; }
+  .dialog-heading .eyebrow { font-size: 8px; justify-content: flex-start; }
+  .setup-section { padding: 15px 0; }
+  .setup-section > select { min-width: 180px; font-size: 11px; padding: 7px; }
+  .setup-section > label { font-size: 12px; }
+  .course-options { grid-template-columns: 1fr; gap: 7px; }
+  .course-option { display: grid; grid-template-columns: 55px 1fr; gap: 4px 8px; padding: 10px; align-items: center; }
+  .course-option small { grid-column: 2; font-size: 9px; }
+  .course-option > span { font-size: 7px; }
+  .custom-fields { grid-template-columns: 1fr .6fr 1fr; gap: 8px; margin-top: 15px; }
+  .custom-tabs { gap: 5px; }
+  .custom-tabs button { font-size: 10px; padding: 8px 4px; }
+  .event-grid { grid-template-columns: 1fr; }
+  .event-entry { padding: 10px; }
+  #control-player { max-width: 113px; min-width: 60px; font-size: 10px; }
+  .player-name { gap: 3px; }
+  .player-card { max-width: 207px; padding: 9px; }
+  .player-details { min-width: 70px; }
+  .player-avatar { width: 29px; height: 33px; font-size: 20px; }
+  .progress-caption { white-space: nowrap; font-size: 8px; }
+  .super-button { padding: 10px; gap: 3px; }
+  .super-copy strong { font-size: 9px; }
+  .super-copy small { font-size: 8px; }
+  .super-button::before { font-size: 18px; }
+  .baby-label { max-width: 100px; }
+  .baby-label .player-tag { max-width: 100px; font-size: 9px; padding: 3px 6px; }
+  .baby-status { max-width: 108px; font-size: 9px; padding: 3px 5px; }
+  .result-row { padding: 10px 0; gap: 8px; }
+  .result-row strong { max-width: 160px; font-size: 10px; }
+  .result-trophy { width: 45px; height: 45px; font-size: 27px; margin: 11px auto; }
+}
+@media (max-width: 760px) and (max-height: 720px) {
+  .menu-content { margin-top: 77px; }
+  .mode-selector { margin-top: 60px; }
+  .menu-links > span { display: none; }
+  .setup-summary { margin-top: 8px; padding: 6px 8px; }
+}
+@media (max-width: 760px) and (orientation: landscape) {
+  .menu-content { margin: 74px 0 50px 30px; width: 330px; }
+  .mode-selector { margin-top: 14px; }
+  .menu-links { margin-top: 5px; }
+  .setup-summary { padding: 5px 8px; }
+}

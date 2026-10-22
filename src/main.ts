@@ -2,240 +2,232 @@ import './styles.css';
 import { GameWorld } from './world';
 import { GameAudio } from './audio';
 import { createRace, startRace, updateRace, moveRattle, ringRattle, useSuper, getProgress, rankBabies, STATE_LABELS, TIME_LIMIT, type Mode } from './simulation';
+import { ACCESSORIES, ACCESSORY_LABELS, COURSES, DEFAULT_STYLES, EVENTS, ZONE_LABELS, getCourse, getEvent, type EventId } from './content';
+import { loadPreferences, savePreferences, loadRecords, saveRecords } from './preferences';
 
-const rattleIcon = `<svg viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="m18 23-8 10" stroke="currentColor" stroke-width="7" stroke-linecap="round"/><circle cx="25" cy="14" r="11" fill="currentColor"/><path d="m17 10 16 7" stroke="#fff9eb" stroke-width="4"/><circle cx="24" cy="8" r="2" fill="#fff9eb"/></svg>`;
-const soundIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 5-5 4H3v6h3l5 4z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg>`;
+const rattleIcon = `<svg viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="m18 23-8 10" stroke="currentColor" stroke-width="7" stroke-linecap="round"/><circle cx="25" cy="14" r="11" fill="currentColor"/><path d="m17 10 16 7" stroke="#fff9eb" stroke-width="4"/></svg>`;
+const esc = (text: string) => text.replace(/[&<>"']/g, char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]!));
 const app = document.querySelector<HTMLDivElement>('#app')!;
+const preferences = loadPreferences();
+const records = loadRecords();
 app.innerHTML = `
-  <header class="topbar">
-    <a class="brand" href="#" aria-label="タイトルに戻る"><span class="brand-icon">${rattleIcon}</span><span class="brand-copy"><strong>ガラガラ！</strong><small>ハイハイレース</small></span></a>
-    <div class="top-actions"><button id="sound-button" class="icon-button sound-button" aria-label="音をオフにする" aria-pressed="false">${soundIcon}</button><button id="help-button" class="icon-button help-button" aria-label="あそびかた">?</button><button id="pause-button" class="icon-button" aria-label="一時停止" hidden>Ⅱ</button></div>
-  </header>
-  <div class="course-badge"><span class="course-dot"></span> はじめてのプレイマット <small>01</small></div>
+  <header class="topbar"><a class="brand" href="#" aria-label="タイトルに戻る"><span class="brand-icon">${rattleIcon}</span><span class="brand-copy"><strong>ガラガラ！</strong><small>ハイハイレース</small></span></a><div class="top-actions"><button id="commentary-button" class="icon-button" aria-label="実況をオンにする" aria-pressed="false">♫</button><button id="sound-button" class="icon-button" aria-label="音をオフにする" aria-pressed="false">♪</button><button id="help-button" class="icon-button help-button" aria-label="あそびかた">?</button><button id="pause-button" class="icon-button" aria-label="一時停止" hidden>Ⅱ</button></div></header>
+  <div class="course-badge"><span id="course-name"></span><small id="course-number"></small></div>
   <div class="race-hud"><span class="timer-label">のこり</span><strong id="timer" class="timer-value">60</strong><span class="timer-unit">秒</span><div class="timer-track"><i id="timer-fill"></i></div></div>
   <div id="event-banner" class="event-banner" role="status" aria-live="polite"></div>
-  <div id="baby-labels" class="labels-overlay" aria-hidden="true"><div id="label-0" class="baby-label"><span class="player-tag">1P · あなた</span><span id="status-0" class="baby-status">ごきげん</span></div><div id="label-1" class="baby-label cpu"><span class="player-tag">CPU · ぷくぷく</span><span id="status-1" class="baby-status">ごきげん</span></div><div id="rattle-hint" class="rattle-hint">ここでシャカシャカ！</div></div>
-  <div class="bottom-hud">
-    <div class="player-card"><div class="player-avatar">1<span>P</span></div><div class="player-details"><div class="player-name">あなたのベビー <span id="rank">1位</span></div><div class="mood-track"><i id="mood-fill"></i></div><div id="mood-caption" class="progress-caption">いいペースで鳴らそう♪</div></div></div>
-    <div class="race-progress"><span>START</span><div class="progress-line"><i id="progress-0" class="progress-dot">1</i><i id="progress-1" class="progress-dot cpu">2</i></div><span>GOAL ⚑</span></div>
-    <button id="super-button" class="super-button"><span class="keycap">R</span><span class="super-copy"><strong>スーパーガラガラ</strong><small>ここぞの1回！</small></span><span class="super-star">✦</span></button>
-  </div>
-  <div id="controls-hint" class="controls-hint"><span>マウスで移動</span><b>·</b><span>クリック / <kbd>SPACE</kbd> で鳴らす</span><b>·</b><span><kbd>W A S D</kbd> でも移動</span></div>
-  <button id="mobile-ring" class="mobile-ring" aria-label="ガラガラを鳴らす">${rattleIcon}<span>鳴らす！</span></button>
-  <section id="menu" class="menu-overlay" aria-label="タイトルメニュー">
-    <div class="menu-content"><div class="eyebrow"><span></span> BABY'S FIRST GRAND PRIX</div><h1><span class="title-top">ガラガラ！<i>✦</i></span><span class="title-bottom">ハイハイレース</span></h1><div class="title-decoration"><span></span><i>●</i><i>●</i><i>●</i></div>
-    <p class="intro-copy">お願い！ そっちじゃないって！！<br><span>ガラガラひとつで、気まぐれベビーをゴールへ。<br>かわいくて、ちょっとおかしな60秒。</span></p>
-    <div class="mode-selector" role="group" aria-label="レースのモード"><button class="mode-option active" data-mode="normal" aria-pressed="true"><span class="mode-icon">☀</span><span class="mode-name">ひとりでレース</span><span class="mode-description">まずはここから</span></button><button class="mode-option" data-mode="chaos" aria-pressed="false"><span class="mode-icon">✦</span><span class="mode-name">ハプニング大盛り</span><span class="mode-description">まさかの連続！</span></button><button class="mode-option" data-mode="skill" aria-pressed="false"><span class="mode-icon">⚑</span><span class="mode-name">ガチハイハイ</span><span class="mode-description">誘導の腕だめし</span></button></div>
-    <button id="start-button" class="primary-button">レースをはじめる <span class="arrow">↗</span></button><p class="menu-note">1 PLAYER vs CPU <span>·</span> 1 RACE / 60 SEC</p>
-    <div class="menu-controls"><div class="control-item"><span class="keycap">↖</span><span>ガラガラを動かす</span></div><div class="control-item"><span class="keycap">SPACE</span><span>シャカシャカ鳴らす</span></div></div></div>
-    <div class="menu-scene-tag"><span class="tiny-star">✦</span><span>READY, BABY?<small>速いだけじゃ、勝てない。</small></span></div>
-    <footer class="menu-footer"><span class="version">PLAYABLE PROTOTYPE <b>ver. 1.0</b></span><span class="engine-tag">ちいさなレース、おおきなハプニング。 <i>✳</i></span></footer>
-  </section>
+  <div id="baby-labels" class="labels-overlay" aria-hidden="true">${[0,1,2,3].map(i=>`<div id="label-${i}" class="baby-label"><span class="player-tag" id="tag-${i}"></span><span id="status-${i}" class="baby-status"></span></div>`).join('')}<div id="rattle-hint" class="rattle-hint">少し前でシャカシャカ！</div></div>
+  <div class="bottom-hud"><div class="player-card"><div id="player-avatar" class="player-avatar">1<span>P</span></div><div class="player-details"><div class="player-name"><label for="control-player" class="sr-only">マウス・タッチで操作するプレイヤー</label><select id="control-player" aria-label="操作するプレイヤー"></select><span id="rank">1位</span></div><div class="mood-track"><i id="mood-fill"></i></div><div id="mood-caption" class="progress-caption">いいペースで鳴らそう♪</div></div></div>
+  <div class="race-progress"><span>START</span><div class="progress-line">${[0,1,2,3].map(i=>`<i id="progress-${i}" class="progress-dot">${i+1}</i>`).join('')}</div><span>GOAL ⚑</span></div>
+  <button id="super-button" class="super-button"><span class="keycap">R</span><span class="super-copy"><strong>スーパーガラガラ</strong><small>ここぞの1回！</small></span><span class="super-star">✦</span></button></div>
+  <div id="controls-hint" class="controls-hint"></div><button id="mobile-ring" class="mobile-ring" aria-label="ガラガラを鳴らす">${rattleIcon}<span>鳴らす！</span></button>
+  <section id="menu" class="menu-overlay" aria-label="タイトルメニュー"><div class="menu-content"><div class="eyebrow">BABY'S FIRST GRAND PRIX</div><h1><span class="title-top">ガラガラ！<i>✦</i></span><span class="title-bottom">ハイハイレース</span></h1><div class="title-decoration"><span></span><i>●</i><i>●</i><i>●</i></div><p class="intro-copy">お願い！ そっちじゃないって！！<br><span>4体の気まぐれベビーが繰り広げる60秒。</span></p>
+  <div class="mode-selector" role="group" aria-label="レースのモード"><button class="mode-option" data-mode="normal"><span class="mode-icon">☀</span><span class="mode-name" id="normal-mode-name">ひとりでレース</span><span class="mode-description">まずはここから</span></button><button class="mode-option" data-mode="chaos"><span class="mode-icon">✦</span><span class="mode-name">ハプニング大盛り</span><span class="mode-description">まさかの連続！</span></button><button class="mode-option" data-mode="skill"><span class="mode-icon">⚑</span><span class="mode-name">ガチハイハイ</span><span class="mode-description">誘導の腕だめし</span></button></div>
+  <button id="setup-button" class="setup-summary"><span id="setup-summary"></span><b>準備する ↗</b></button><button id="start-button" class="primary-button">レースをはじめる <span class="arrow">↗</span></button><p class="menu-note" id="menu-note"></p><div class="menu-links"><button id="catalog-button">ハプニングずかん <span id="catalog-count">0 / 24</span></button><span id="record-summary"></span></div></div><div class="menu-scene-tag"><span class="tiny-star">✦</span><span>READY, BABY?<small>速いだけじゃ、勝てない。</small></span></div><footer class="menu-footer"><span class="version">BABY RACE <b>ver. 2.0</b></span><span class="engine-tag">ちいさなレース、おおきなハプニング。</span></footer></section>
+  <section id="setup" class="dialog-overlay" hidden aria-label="レースの準備"><div class="dialog-card setup-card"><div class="dialog-heading"><div><span class="eyebrow">GET READY</span><h2>みんなのレースをつくろう。</h2></div><button id="setup-close-x" class="icon-button" aria-label="準備を閉じる">×</button></div>
+  <div class="setup-section"><label for="human-players">あそぶ人数</label><select id="human-players"><option value="1">ひとり ＋ CPU 3体</option><option value="2">ふたり ＋ CPU 2体</option><option value="3">3人 ＋ CPU 1体</option><option value="4">4人で対戦</option></select><p class="setup-note">同じ端末で対戦。キーボード・最大4台のゲームパッドに対応。</p></div>
+  <div class="setup-section"><h3>コースをえらぶ</h3><div class="course-options">${COURSES.map((course,i)=>`<button class="course-option" data-course="${course.id}" style="--course-color:#${course.palette[0].toString(16)}"><span>COURSE 0${i+1}</span><strong>${course.name}</strong><small>${course.description}</small></button>`).join('')}</div></div>
+  <div class="setup-section"><h3>ベビーのおめかし</h3><div class="custom-tabs" role="group" aria-label="おめかしするベビー">${[0,1,2,3].map(i=>`<button data-custom-player="${i}">${i+1}P</button>`).join('')}</div><div class="custom-fields"><label>なまえ<input id="baby-name" maxlength="12" autocomplete="off"></label><label>おようふく<input id="baby-color" type="color"></label><label>アクセサリー<select id="baby-accessory">${ACCESSORIES.map(a=>`<option value="${a}">${ACCESSORY_LABELS[a]}</option>`).join('')}</select></label></div><p class="setup-note">CPUのベビーもおめかしできます。設定とずかんはこの端末に保存。</p></div>
+  <details class="keyboard-guide"><summary>みんなで遊ぶときの操作を見る</summary><div class="key-grid"><span>1P</span><span>WASD ／ Spaceで鳴らす ／ Rでスーパー</span><span>2P</span><span>矢印 ／ Enterで鳴らす ／ 右Shiftでスーパー</span><span>3P</span><span>IJKL ／ Oで鳴らす ／ Uでスーパー</span><span>4P</span><span>テンキー8456 ／ 0で鳴らす ／ .でスーパー</span></div><p>ゲームパッドは接続順に1P〜4P。左スティック・A・RBで操作。マウス・タッチは画面下で操作するプレイヤーを切り替えられます。</p></details><button id="setup-close" class="primary-button">準備OK！ ↗</button></div></section>
+  <section id="catalog" class="dialog-overlay" hidden aria-label="ハプニングずかん"><div class="dialog-card catalog-card"><div class="dialog-heading"><div><span class="eyebrow">LITTLE BIG HAPPENINGS</span><h2>ハプニングずかん</h2><p id="catalog-progress"></p></div><button id="catalog-close" class="icon-button" aria-label="ずかんを閉じる">×</button></div><div id="catalog-list"></div></div></section>
   <div id="countdown" class="countdown-overlay" hidden><span class="countdown-number" id="countdown-number">3</span><small>ガラガラの準備はいい？</small></div>
   <section id="pause" class="dialog-overlay" hidden aria-label="一時停止"><div class="dialog-card"><span class="eyebrow">TAKE A LITTLE BREAK</span><h2>ちょっと、ひとやすみ。</h2><p>ベビーもあなたを待っています。</p><button id="resume-button" class="primary-button">レースにもどる ↗</button><button id="return-button" class="secondary-button">タイトルにもどる</button></div></section>
-  <section id="help" class="dialog-overlay" hidden aria-label="あそびかた"><div class="dialog-card"><span class="eyebrow">HOW TO PLAY</span><h2>主役は、ガラガラ。</h2><div class="help-step"><b>01</b><p><strong>ベビーの少し前へ</strong><br>マウス・ドラッグ・矢印 / WASDで移動。<br>スティックでも動かせます。</p></div><div class="help-step"><b>02</b><p><strong>いいリズムでシャカシャカ！</strong><br>クリック・Space・ゲームパッドのAで鳴らす。<br>1秒に1回くらい。連打すると飽きちゃう！</p></div><div class="help-step"><b>03</b><p><strong>とっておきは、1回だけ</strong><br>R・画面のボタン・ゲームパッドのRBで<br>スーパーガラガラ。寄り道から呼び戻そう！</p></div><p class="help-footnote">60秒でゴールへ！ 時間切れは進行度で判定。<br>大盛りモードなら「たっち覚醒」に出会いやすい！</p><button id="help-close" class="primary-button">わかった！ ↗</button></div></section>
-  <section id="result" class="dialog-overlay" hidden aria-label="レース結果"><div class="dialog-card result-card"><div class="result-eyebrow">FINISH! NICE RACE!</div><div class="result-trophy">⚑</div><h2 id="result-title"></h2><p id="result-subtitle"></p><div id="result-stats" class="result-stats"></div><button id="retry-button" class="primary-button">もう1回、ハイハイ！ ↗</button><button id="result-menu" class="secondary-button">タイトルにもどる</button></div></section>
-  <div id="webgl-error" class="dialog-overlay" hidden><div class="dialog-card"><h2>3D画面を開けませんでした</h2><p>WebGLが使えるブラウザーで開いてください。<br>ブラウザーのハードウェアアクセラレーションを<br>有効にして再読み込みすると改善する場合があります。</p><button id="reload-button" class="primary-button">再読み込み</button></div></div>
-`;
+  <section id="help" class="dialog-overlay" hidden aria-label="あそびかた"><div class="dialog-card"><span class="eyebrow">HOW TO PLAY</span><h2>主役は、ガラガラ。</h2><div class="help-step"><b>01</b><p><strong>ベビーの少し前へ</strong><br>マウス・ドラッグ・WASDでガラガラを移動。<br>ひとりなら矢印でもOK。</p></div><div class="help-step"><b>02</b><p><strong>いいリズムでシャカシャカ！</strong><br>クリック・Space・パッドAで鳴らす。<br>1秒に1回くらい。連打すると飽きちゃう！</p></div><div class="help-step"><b>03</b><p><strong>とっておきは、ひとり1回</strong><br>R・画面のボタン・パッドRBでスーパー。<br>コースの色つきゾーンにも注目！</p></div><p class="help-footnote">♡ 笑い声は近くのベビーにも伝染！<br>♫ ボタンで実況をオン。端末の日本語音声を使います。<br>多人対戦の操作は「準備する」で確認できます。</p><button id="help-close" class="primary-button">わかった！ ↗</button></div></section>
+  <section id="result" class="dialog-overlay" hidden aria-label="レース結果"><div class="dialog-card result-card"><div class="result-eyebrow">FINISH! NICE RACE!</div><div class="result-trophy">⚑</div><h2 id="result-title"></h2><p id="result-subtitle"></p><div id="result-stats" class="result-stats"></div><p id="discovery-summary" class="discovery-summary"></p><button id="retry-button" class="primary-button">もう1回、ハイハイ！ ↗</button><button id="result-menu" class="secondary-button">タイトルにもどる</button></div></section>
+  <div id="webgl-error" class="dialog-overlay" hidden><div class="dialog-card"><h2>3D画面を開けませんでした</h2><p>WebGLが使えるブラウザーで開いてください。<br>ハードウェアアクセラレーションを有効にして<br>再読み込みすると改善する場合があります。</p><button id="reload-button" class="primary-button">再読み込み</button></div></div>`;
 
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-let selectedMode: Mode = 'normal';
-let race = createRace(selectedMode);
-let world: GameWorld;
+let race = createRace(preferences.mode, Date.now(), preferences);
+let world: GameWorld | undefined;
 const audio = new GameAudio();
-let paused = false, helpWasPaused = false, lastEvent = -1, lastPhase = race.phase, bannerUntil = 0, bannerPriority = -1, finishHandled = false;
-let lastTime = performance.now(), elapsed = 0, lastCountdown = 4, lastRingTime = -1;
+let paused = false, dialogWasPaused = false, lastEvent = -1, lastPhase = race.phase, bannerUntil = 0, bannerPriority = -1, finishHandled = false;
+let lastTime = performance.now(), elapsed = 0, lastCountdown = 4, activePlayer = 0, customPlayer = 0;
+let raceDiscoveries: EventId[] = [];
 const keys = new Set<string>();
-let gamepadRingHeld = false, gamepadSuperHeld = false;
+const lastRingTime = Array(4).fill(-Infinity);
+const gamepadRingHeld = Array(4).fill(false), gamepadSuperHeld = Array(4).fill(false);
+const playerLabel = (id: number) => race.babies[id].isCpu ? `CPU${id - race.humanPlayers + 1}` : `${id+1}P`;
+const save = () => savePreferences(preferences);
+try { world = new GameWorld(app); } catch (error) { console.error('WebGL initialization failed',error); el('webgl-error').hidden = false; }
+if (!preferences.sound) audio.toggle();
+audio.setCommentary(preferences.commentary);
 
-try { world = new GameWorld(app); } catch (error) {
-  console.error('WebGL initialization failed', error); el('webgl-error').hidden = false;
+function syncSound() {
+  el('sound-button').setAttribute('aria-pressed',String(!preferences.sound));
+  el('sound-button').setAttribute('aria-label',preferences.sound ? '音をオフにする' : '音をオンにする');
+  el('commentary-button').setAttribute('aria-pressed',String(preferences.commentary));
+  el('commentary-button').setAttribute('aria-label',preferences.commentary ? '実況をオフにする' : '実況をオンにする');
+  el('commentary-button').title = preferences.commentary ? '実況オン（対応する日本語音声がある端末）' : '実況をオンにする';
 }
-
+function refreshSettings() {
+  const count = preferences.humanPlayers;
+  el('setup-summary').textContent = `${count}人${count<4 ? ` ＋ CPU ${4-count}体` : 'で対戦'} · ${getCourse(preferences.courseId).name}`;
+  el('menu-note').textContent = `${count} PLAYER${count>1?'S':''}${count<4?` vs ${4-count} CPU`:''} · 60 SEC`;
+  el('normal-mode-name').textContent = count===1 ? 'ひとりでレース' : 'みんなでレース';
+  el<HTMLSelectElement>('human-players').value = String(count);
+  el('catalog-count').textContent = `${records.seen.length} / 24`;
+  el('record-summary').textContent = records.races ? `${records.races}レース · ${records.wins}勝` : 'どんなハプニングに出会うかな？';
+  document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button=>{ const active=button.dataset.mode===preferences.mode; button.classList.toggle('active',active); button.setAttribute('aria-pressed',String(active)); });
+  document.querySelectorAll<HTMLButtonElement>('[data-course]').forEach(button=>{ const active=button.dataset.course===preferences.courseId; button.classList.toggle('active',active); button.setAttribute('aria-pressed',String(active)); });
+  document.querySelectorAll<HTMLButtonElement>('[data-custom-player]').forEach((button,i)=>{ button.style.setProperty('--racer-color',preferences.styles[i].color); button.textContent=`${i+1}${i<count?'P':' · CPU'}`; button.setAttribute('aria-pressed',String(i===customPlayer)); });
+}
+function loadCustomFields() {
+  const style=preferences.styles[customPlayer];
+  el<HTMLInputElement>('baby-name').value=style.name; el<HTMLInputElement>('baby-color').value=style.color; el<HTMLSelectElement>('baby-accessory').value=style.accessory;
+  refreshSettings();
+}
+function rebuildPreview() { if (race.phase==='ready') { race=createRace(preferences.mode,Date.now(),preferences); configureRacers(); } }
+function configureRacers() {
+  activePlayer=Math.min(activePlayer,race.humanPlayers-1);
+  el('control-player').innerHTML=race.babies.filter(b=>!b.isCpu).map(b=>`<option value="${b.id}">${b.id+1}P · ${esc(b.name)}</option>`).join('');
+  el<HTMLSelectElement>('control-player').value=String(activePlayer);
+  race.babies.forEach((baby,i)=>{
+    el(`label-${i}`).style.setProperty('--racer-color',baby.style.color);
+    el(`tag-${i}`).textContent=`${playerLabel(i)} · ${baby.name}`;
+    el(`progress-${i}`).style.background=baby.style.color;
+    el(`progress-${i}`).title=`${playerLabel(i)} · ${baby.name}`;
+    el(`progress-${i}`).classList.toggle('cpu',baby.isCpu);
+  });
+  el('course-name').textContent=getCourse(race.courseId).name;
+  el('course-number').textContent=`0${COURSES.findIndex(c=>c.id===race.courseId)+1}`;
+  el('controls-hint').textContent=race.humanPlayers===1 ? 'マウス / WASD / 矢印で移動 · クリック / SPACEで鳴らす · Rでスーパー' : '1P WASD + Space/R · 2P 矢印 + Enter/右Shift · 3P IJKL + O/U · 4P テンキー8456 + 0/.';
+}
 function syncPhase() {
-  document.body.dataset.phase = race.phase;
-  el('menu').hidden = race.phase !== 'ready';
-  el('countdown').hidden = race.phase !== 'countdown';
-  el('pause-button').hidden = !['racing', 'countdown'].includes(race.phase);
-  el('mobile-ring').style.visibility = race.phase === 'racing' ? 'visible' : 'hidden';
+  document.body.dataset.phase=race.phase;
+  el('menu').hidden=race.phase!=='ready'; el('countdown').hidden=race.phase!=='countdown';
+  el('pause-button').hidden=!['racing','countdown'].includes(race.phase);
+  el('mobile-ring').style.visibility=race.phase==='racing'?'visible':'hidden';
 }
 function begin() {
   if (!world) return;
-  audio.unlock(); race = createRace(selectedMode, Date.now()); startRace(race);
-  paused = false; lastEvent = -1; finishHandled = false; lastCountdown = 4;
-  bannerUntil = 0; bannerPriority = -1; el('event-banner').classList.remove('visible'); el('rattle-hint').hidden = false;
-  ['pause', 'result', 'help'].forEach(id => el(id).hidden = true);
-  syncPhase(); (document.activeElement as HTMLElement)?.blur();
+  audio.stopCommentary(); audio.unlock(); race=createRace(preferences.mode,Date.now(),preferences); startRace(race);
+  paused=false; activePlayer=0; keys.clear(); lastRingTime.fill(-Infinity); gamepadRingHeld.fill(false); gamepadSuperHeld.fill(false);
+  lastEvent=-1; finishHandled=false; lastCountdown=4; bannerUntil=0; bannerPriority=-1; raceDiscoveries=[];
+  el('event-banner').classList.remove('visible'); el('rattle-hint').hidden=false;
+  ['pause','result','help','setup','catalog'].forEach(id=>el(id).hidden=true);
+  configureRacers(); syncPhase(); (document.activeElement as HTMLElement)?.blur();
 }
 function showMenu() {
-  race = createRace(selectedMode); paused = false; keys.clear();
-  ['pause', 'result', 'help'].forEach(id => el(id).hidden = true);
-  el('event-banner').classList.remove('visible'); syncPhase(); el('start-button').focus();
+  audio.stopCommentary(); race=createRace(preferences.mode,Date.now(),preferences); paused=false; keys.clear();
+  ['pause','result','help','setup','catalog'].forEach(id=>el(id).hidden=true);
+  el('event-banner').classList.remove('visible'); configureRacers(); refreshSettings(); syncPhase(); el('start-button').focus();
 }
-function ring() {
-  if (paused || race.phase !== 'racing' || elapsed - lastRingTime < .1) return;
-  lastRingTime = elapsed; audio.unlock(); ringRattle(race); audio.ring();
-  el('rattle-hint').hidden = true;
+function ring(id=activePlayer) {
+  if (paused || race.phase!=='racing' || id>=race.humanPlayers || elapsed-lastRingTime[id]<.1) return;
+  lastRingTime[id]=elapsed; audio.unlock(); if (ringRattle(race,id)) audio.ring(); el('rattle-hint').hidden=true;
 }
-function superRing() {
-  if (paused || race.phase !== 'racing' || race.babies[0].superUsed) return;
-  audio.unlock(); useSuper(race); audio.ring(true);
-}
+function superRing(id=activePlayer) { if (paused || race.phase!=='racing' || id>=race.humanPlayers) return; audio.unlock(); if(useSuper(race,id)) audio.ring(true); }
 function togglePause() {
-  if (!['racing', 'countdown'].includes(race.phase) || !el('help').hidden) return;
-  paused = !paused; keys.clear(); el('pause').hidden = !paused;
-  if (paused) el('resume-button').focus();
+  if (!['racing','countdown'].includes(race.phase) || !el('help').hidden) return;
+  paused=!paused; keys.clear(); if(paused) audio.stopCommentary(); el('pause').hidden=!paused; if(paused) el('resume-button').focus();
 }
-function showHelp() {
-  helpWasPaused = paused; paused = true; keys.clear(); el('help').hidden = false; el('help-close').focus();
+function openDialog(id: string) { dialogWasPaused=paused; paused=true; keys.clear(); audio.stopCommentary(); el(id).hidden=false; }
+function closeDialog(id: string) { el(id).hidden=true; paused=dialogWasPaused; }
+function renderCatalog() {
+  el('catalog-progress').textContent=`発見 ${records.seen.length} / 24 · 大盛りモードでいろいろ探してみよう！`;
+  el('catalog-list').innerHTML=(['normal','rare','legendary'] as const).map((rarity,i)=>`<h3>${['いつものハプニング','レアハプニング','バカ覚醒ハプニング'][i]}</h3><div class="event-grid">${EVENTS.filter(e=>e.rarity===rarity).map(event=>{const seen=records.seen.includes(event.id);return `<article class="event-entry ${seen?'discovered':'undiscovered'}"><span class="event-icon">${seen?event.icon:'?'}</span><div><small>${event.id}</small><strong>${seen?event.name:'まだ出会っていない'}</strong><p>${seen?event.description:'レースを走って、発見しよう！'}</p></div></article>`;}).join('')}</div>`).join('');
 }
-function closeHelp() { el('help').hidden = true; paused = helpWasPaused; }
+document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(button=>button.addEventListener('click',()=>{preferences.mode=button.dataset.mode as Mode;save();refreshSettings();rebuildPreview();}));
+document.querySelectorAll<HTMLButtonElement>('[data-course]').forEach(button=>button.addEventListener('click',()=>{preferences.courseId=COURSES.find(c=>c.id===button.dataset.course)!.id;save();refreshSettings();rebuildPreview();}));
+document.querySelectorAll<HTMLButtonElement>('[data-custom-player]').forEach(button=>button.addEventListener('click',()=>{customPlayer=Number(button.dataset.customPlayer);loadCustomFields();}));
+el('human-players').addEventListener('change',()=>{preferences.humanPlayers=Number(el<HTMLSelectElement>('human-players').value);save();refreshSettings();rebuildPreview();});
+function updateCustom() {
+  preferences.styles[customPlayer]={name:el<HTMLInputElement>('baby-name').value.trim().slice(0,12)||DEFAULT_STYLES[customPlayer].name,color:el<HTMLInputElement>('baby-color').value,accessory:el<HTMLSelectElement>('baby-accessory').value as typeof ACCESSORIES[number]}; save();refreshSettings();rebuildPreview();
+}
+['baby-name','baby-color','baby-accessory'].forEach(id=>el(id).addEventListener('change',updateCustom));
+el('start-button').addEventListener('click',begin); el('retry-button').addEventListener('click',begin);
+el('return-button').addEventListener('click',showMenu); el('result-menu').addEventListener('click',showMenu);
+el('resume-button').addEventListener('click',togglePause); el('pause-button').addEventListener('click',togglePause);
+el('help-button').addEventListener('click',()=>openDialog('help')); el('help-close').addEventListener('click',()=>closeDialog('help'));
+el('setup-button').addEventListener('click',()=>{loadCustomFields();openDialog('setup');});
+['setup-close','setup-close-x'].forEach(id=>el(id).addEventListener('click',()=>{updateCustom();closeDialog('setup');}));
+el('catalog-button').addEventListener('click',()=>{renderCatalog();openDialog('catalog');});el('catalog-close').addEventListener('click',()=>closeDialog('catalog'));
+el('super-button').addEventListener('click',()=>superRing()); el('mobile-ring').addEventListener('pointerdown',e=>{e.preventDefault();ring();});
+el('control-player').addEventListener('change',()=>{activePlayer=Number(el<HTMLSelectElement>('control-player').value);el('rattle-hint').hidden=false;});
+el('reload-button').addEventListener('click',()=>location.reload());
+el('sound-button').addEventListener('click',()=>{preferences.sound=audio.toggle();save();syncSound();});
+el('commentary-button').addEventListener('click',()=>{preferences.commentary=!preferences.commentary;audio.setCommentary(preferences.commentary);audio.unlock();save();syncSound();});
+document.querySelector('.brand')!.addEventListener('click',e=>{e.preventDefault();if(['ready','finished'].includes(race.phase))showMenu();else togglePause();});
 
-document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(btn => btn.addEventListener('click', () => {
-  selectedMode = btn.dataset.mode as Mode;
-  document.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(b => { b.classList.toggle('active', b === btn); b.setAttribute('aria-pressed', String(b === btn)); });
-  race = createRace(selectedMode);
-}));
-el('start-button').addEventListener('click', begin); el('retry-button').addEventListener('click', begin);
-el('return-button').addEventListener('click', showMenu); el('result-menu').addEventListener('click', showMenu);
-el('resume-button').addEventListener('click', togglePause); el('pause-button').addEventListener('click', togglePause);
-el('help-button').addEventListener('click', showHelp); el('help-close').addEventListener('click', closeHelp);
-el('super-button').addEventListener('click', superRing); el('mobile-ring').addEventListener('pointerdown', e => { e.preventDefault(); ring(); });
-el('reload-button').addEventListener('click', () => location.reload());
-el('sound-button').addEventListener('click', () => {
-  const enabled = audio.toggle(); el('sound-button').classList.toggle('muted', !enabled);
-  el('sound-button').setAttribute('aria-pressed', String(!enabled)); el('sound-button').setAttribute('aria-label', enabled ? '音をオフにする' : '音をオンにする');
+const mappings=[{up:'KeyW',down:'KeyS',left:'KeyA',right:'KeyD',ring:'Space',super:'KeyR'}, {up:'ArrowUp',down:'ArrowDown',left:'ArrowLeft',right:'ArrowRight',ring:'Enter',super:'ShiftRight'}, {up:'KeyI',down:'KeyK',left:'KeyJ',right:'KeyL',ring:'KeyO',super:'KeyU'}, {up:'Numpad8',down:'Numpad5',left:'Numpad4',right:'Numpad6',ring:'Numpad0',super:'NumpadDecimal'}];
+window.addEventListener('keydown',e=>{
+  if(e.code==='Escape'){const dialog=['help','setup','catalog'].find(id=>!el(id).hidden);if(dialog)closeDialog(dialog);else togglePause();return;}
+  if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement||e.target instanceof HTMLTextAreaElement)return;
+  if(paused || !['countdown','racing'].includes(race.phase))return;
+  if(mappings.some(map=>Object.values(map).includes(e.code)))e.preventDefault();
+  keys.add(e.code);if(e.repeat)return;
+  mappings.slice(0,race.humanPlayers).forEach((map,i)=>{if(e.code===map.ring)ring(i);if(e.code===map.super)superRing(i);});
 });
-document.querySelector('.brand')!.addEventListener('click', e => { e.preventDefault(); if (race.phase === 'ready' || race.phase === 'finished') showMenu(); else togglePause(); });
-
-window.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { if (!el('help').hidden) closeHelp(); else togglePause(); return; }
-  if (paused || race.phase === 'ready' || race.phase === 'finished') return;
-  if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
-  keys.add(e.key.toLowerCase()); if (e.repeat) return;
-  if (e.code === 'Space') ring(); if (e.code === 'KeyR') superRing();
-});
-window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
-window.addEventListener('blur', () => { keys.clear(); if (!paused && ['racing', 'countdown'].includes(race.phase)) togglePause(); });
-document.addEventListener('visibilitychange', () => { if (document.hidden && !paused && ['racing', 'countdown'].includes(race.phase)) togglePause(); });
-window.addEventListener('resize', () => world?.resize());
-
-if (world!) {
-  const canvas = world.renderer.domElement;
-  let dragging = false;
-  const movePointer = (e: PointerEvent) => {
-    if (paused || race.phase !== 'racing' || (e.pointerType === 'touch' && !dragging)) return;
-    const p = world.worldPoint(e.clientX, e.clientY); if (p) moveRattle(race, p.x, p.z);
-  };
-  canvas.addEventListener('pointermove', movePointer);
-  canvas.addEventListener('pointerdown', e => {
-    if (e.button !== 0 || paused || race.phase !== 'racing') return;
-    dragging = true; canvas.setPointerCapture(e.pointerId); movePointer(e); ring(); e.preventDefault();
+window.addEventListener('keyup',e=>keys.delete(e.code));
+el('control-player').addEventListener('focus',()=>keys.clear());
+const autoPause=()=>{keys.clear();if(!paused&&['racing','countdown'].includes(race.phase))togglePause();};
+window.addEventListener('blur',autoPause);document.addEventListener('visibilitychange',()=>{if(document.hidden)autoPause();});
+window.addEventListener('resize',()=>world?.resize());
+if(world){
+  const canvas=world.renderer.domElement;let dragging=false;
+  const movePointer=(e:PointerEvent)=>{if(paused||race.phase!=='racing'||(e.pointerType==='touch'&&!dragging))return;const point=world!.worldPoint(e.clientX,e.clientY);if(point)moveRattle(race,point.x,point.z,activePlayer);};
+  canvas.addEventListener('pointermove',movePointer);canvas.addEventListener('pointerdown',e=>{if(e.button!==0||paused||race.phase!=='racing')return;dragging=true;canvas.setPointerCapture(e.pointerId);movePointer(e);ring();e.preventDefault();});
+  canvas.addEventListener('pointerup',()=>dragging=false);canvas.addEventListener('pointercancel',()=>dragging=false);
+  canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();paused=true;audio.stopCommentary();el('webgl-error').hidden=false;});
+  canvas.addEventListener('webglcontextrestored',()=>{el('webgl-error').hidden=true;paused=false;});
+}
+function updateInput(dt:number){
+  if(paused||race.phase!=='racing')return;
+  const pads=Array.from(navigator.getGamepads?.()??[]).filter((pad):pad is Gamepad=>!!pad&&pad.connected);
+  for(let i=0;i<race.humanPlayers;i++){
+    const map=mappings[i];let dx=Number(keys.has(map.right))-Number(keys.has(map.left)),dz=Number(keys.has(map.down))-Number(keys.has(map.up));
+    if(i===0&&race.humanPlayers===1){dx+=Number(keys.has('ArrowRight'))-Number(keys.has('ArrowLeft'));dz+=Number(keys.has('ArrowDown'))-Number(keys.has('ArrowUp'));}
+    const pad=pads[i];if(pad){dx+=Math.abs(pad.axes[0]??0)>.16?pad.axes[0]:0;dz+=Math.abs(pad.axes[1]??0)>.16?pad.axes[1]:0;const ringPressed=!!pad.buttons[0]?.pressed,superPressed=!!pad.buttons[5]?.pressed;if(ringPressed&&!gamepadRingHeld[i])ring(i);if(superPressed&&!gamepadSuperHeld[i])superRing(i);gamepadRingHeld[i]=ringPressed;gamepadSuperHeld[i]=superPressed;}else{gamepadRingHeld[i]=false;gamepadSuperHeld[i]=false;}
+    const length=Math.hypot(dx,dz);if(length){const rattle=race.rattles[i],speed=7*dt/Math.max(1,length);moveRattle(race,rattle.x+dx*speed,rattle.z+dz*speed,i);}
+  }
+}
+function finish(){
+  finishHandled=true;audio.stopCommentary();audio.cue('finish');records.races++;if(race.winner!==null&&!race.babies[race.winner].isCpu)records.wins++;saveRecords(records);
+  const ranking=rankBabies(race),winner=race.winner??0;
+  el('result-title').textContent=race.humanPlayers===1?(winner===0?'やったね！ 1位！':'ナイス、ハイハイ！'):`${playerLabel(winner)} の勝ち！`;
+  el('result-subtitle').textContent=`${race.babies[winner].name}、おめでとう！ ${getCourse(race.courseId).name}`;
+  el('result-stats').innerHTML=ranking.map((baby,i)=>`<div class="result-row"><span class="result-place" style="color:${baby.style.color}">${i+1}<small>位</small></span><strong>${playerLabel(baby.id)} · ${esc(baby.name)}</strong><span>${baby.finishedAt!==null?`${baby.finishedAt.toFixed(1)} 秒`:`${Math.floor(getProgress(baby)*100)} %`}</span></div>`).join('');
+  el('discovery-summary').textContent=raceDiscoveries.length?`NEW！ ${raceDiscoveries.map(id=>getEvent(id).name).join(' / ')}`:`ずかん ${records.seen.length} / 24 · 次はどんなハプニング？`;
+  el('result').hidden=false;el('retry-button').focus();const baby=race.babies[winner];world?.confetti(baby.x,baby.z,80);refreshSettings();
+}
+function positionLabels(){
+  if(!world)return;
+  const positions=world.babies.map(rig=>world!.screenPoint(rig.root.position.x,2.55,rig.root.position.z));
+  const widths=positions.map((_,i)=>Math.min(innerWidth<600?100:122,el(`label-${i}`).offsetWidth||100));
+  positions.forEach((pos,i)=>{pos.x=Math.max(widths[i]/2+4,Math.min(innerWidth-widths[i]/2-4,pos.x));pos.y=Math.max(innerWidth<600?205:160,Math.min(innerHeight-165,pos.y));});
+  const placed: {x:number;y:number;width:number}[]=[];
+  const minY=innerHeight<500?185:innerWidth<600?252:232,maxY=Math.max(minY+105,innerHeight-165);
+  positions.map((pos,i)=>({pos,i})).sort((a,b)=>a.pos.y-b.pos.y).forEach(({pos,i})=>{
+    const desired=Math.max(minY,Math.min(maxY,pos.y));
+    const candidates=Array.from({length:Math.ceil((maxY-minY)/52)+1},(_,n)=>minY+n*52).filter(y=>y<=maxY);
+    candidates.unshift(desired);candidates.sort((a,b)=>Math.abs(a-desired)-Math.abs(b-desired));
+    pos.y=candidates.find(y=>placed.every(other=>Math.abs(pos.x-other.x)>=(widths[i]+other.width)/2+5||Math.abs(y-other.y)>=52))??desired;
+    placed.push({x:pos.x,y:pos.y,width:widths[i]});
   });
-  const release = () => dragging = false;
-  canvas.addEventListener('pointerup', release); canvas.addEventListener('pointercancel', release);
-  canvas.addEventListener('webglcontextlost', e => {
-    e.preventDefault(); paused = true; el('webgl-error').hidden = false;
-  });
-  canvas.addEventListener('webglcontextrestored', () => { el('webgl-error').hidden = true; paused = false; });
+  positions.forEach((pos,i)=>{el(`label-${i}`).style.transform=`translate(${pos.x}px,${pos.y}px) translate(-50%,-100%)`;el(`label-${i}`).hidden=['ready','finished'].includes(race.phase);});
 }
-
-function updateInput(dt: number) {
-  if (paused || race.phase !== 'racing') return;
-  let dx = 0, dz = 0;
-  if (keys.has('w') || keys.has('arrowup')) dz -= 1;
-  if (keys.has('s') || keys.has('arrowdown')) dz += 1;
-  if (keys.has('a') || keys.has('arrowleft')) dx -= 1;
-  if (keys.has('d') || keys.has('arrowright')) dx += 1;
-  const gamepad = navigator.getGamepads?.().find(p => p?.connected);
-  if (gamepad) {
-    dx += Math.abs(gamepad.axes[0] ?? 0) > .16 ? gamepad.axes[0] : 0;
-    dz += Math.abs(gamepad.axes[1] ?? 0) > .16 ? gamepad.axes[1] : 0;
-    const ringPressed = !!gamepad.buttons[0]?.pressed;
-    const superPressed = !!gamepad.buttons[5]?.pressed;
-    if (ringPressed && !gamepadRingHeld) ring(); if (superPressed && !gamepadSuperHeld) superRing();
-    gamepadRingHeld = ringPressed; gamepadSuperHeld = superPressed;
+function updateUI(){
+  if(race.phase!==lastPhase){if(race.phase==='racing')audio.cue('start');syncPhase();lastPhase=race.phase;}
+  if(race.phase==='countdown'){const num=Math.ceil(race.countdown);el('countdown-number').textContent=String(Math.max(1,num));if(num!==lastCountdown){audio.cue('tick');lastCountdown=num;}}
+  el('timer').textContent=String(Math.ceil(Math.max(0,TIME_LIMIT-race.time))).padStart(2,'0');el('timer-fill').style.width=`${Math.max(0,1-race.time/TIME_LIMIT)*100}%`;el('timer').classList.toggle('urgent',race.time>50);
+  const ranking=rankBabies(race),baby=race.babies[activePlayer];el('rank').textContent=`${ranking.findIndex(b=>b.id===activePlayer)+1}位`;
+  el('player-avatar').innerHTML=`${activePlayer+1}<span>P</span>`;el('player-avatar').style.background=`${baby.style.color}44`;
+  el('mood-fill').style.width=`${Math.max(0,Math.min(100,baby.mood*100))}%`;
+  el('mood-caption').textContent=baby.boredom>.6?'鳴らしすぎ！ 少し待ってみよう':baby.zone?ZONE_LABELS[baby.zone]:baby.state==='distracted'?'寄り道中！ 近くで呼ぼう':baby.attention<.2?'ベビーの少し前で鳴らしてね':'いいリズム！ その調子♪';
+  el<HTMLButtonElement>('super-button').disabled=baby.superUsed||race.phase!=='racing';el('super-button').querySelector('small')!.textContent=baby.superUsed?'つかいきったよ！':`${activePlayer+1}P · ここぞの1回！`;el('super-button').querySelector('.keycap')!.textContent=['R','右⇧','U','.'][activePlayer];
+  race.babies.forEach((b,i)=>{el(`progress-${i}`).style.left=`${getProgress(b)*100}%`;el(`progress-${i}`).style.top=`${(i-1.5)*5}px`;el(`status-${i}`).textContent=`${b.eventId?getEvent(b.eventId).name:STATE_LABELS[b.state]}${b.isCpu?'':b.superUsed?'':' ✦'}`;el(`label-${i}`).classList.toggle('awakened',b.eventId?.startsWith('S')??false);});positionLabels();
+  if(world){const r=race.rattles[activePlayer],p=world.screenPoint(r.x,1.8,r.z);el('rattle-hint').style.transform=`translate(${p.x}px,${p.y}px) translate(-50%,-100%)`;}
+  const priority=(kind:string)=>kind==='legendary'?3:['super','rare','finish'].includes(kind)?2:kind==='good'?0:1;
+  const pending=race.events.filter(event=>event.id>lastEvent);
+  for(const event of pending){if(event.eventId&&!records.seen.includes(event.eventId)){records.seen.push(event.eventId);raceDiscoveries.push(event.eventId);saveRecords(records);}}
+  pending.sort((a,b)=>priority(b.kind)-priority(a.kind)||b.id-a.id);const event=pending[0];if(event)lastEvent=Math.max(...race.events.map(e=>e.id));
+  if(event&&(elapsed>=bannerUntil||priority(event.kind)>=bannerPriority)){
+    bannerPriority=priority(event.kind);el('event-banner').textContent=['start','finish'].includes(event.kind)?event.text:`${playerLabel(event.babyId)}！ ${event.text}`;el('event-banner').classList.add('visible');el('event-banner').classList.toggle('special',/legendary|super|rare/.test(event.kind));bannerUntil=elapsed+(event.kind==='legendary'?2.8:2.1);
+    if(event.eventId)audio.event(event.eventId,playerLabel(event.babyId),priority(event.kind));
+    if(event.kind==='legendary'){const b=race.babies[event.babyId];if(b)world?.confetti(b.x,b.z,20);}
   }
-  const length = Math.hypot(dx, dz);
-  if (length > 0) {
-    const r = race.rattles[0]; const speed = 7 * dt / Math.max(1, length);
-    moveRattle(race, r.x + dx * speed, r.z + dz * speed);
-  }
+  if(elapsed>bannerUntil)el('event-banner').classList.remove('visible');if(race.phase==='finished'&&!finishHandled)finish();
 }
-
-function finish() {
-  finishHandled = true; audio.cue('finish');
-  const ranking = rankBabies(race); const won = race.winner === 0;
-  el('result-title').textContent = won ? 'やったね！ 1位！' : 'ナイス、ハイハイ！';
-  el('result-subtitle').textContent = won ? '寄り道も、ぜんぶいい思い出。' : '気まぐれベビー、次こそゴールへ！';
-  el('result-stats').innerHTML = ranking.map((baby, i) => `<div class="result-row"><span class="result-place">${i + 1}<small>位</small></span><strong>${baby.id === 0 ? '1P · あなた' : 'CPU · ぷくぷく'}</strong><span>${baby.finishedAt !== null ? `${baby.finishedAt.toFixed(1)} 秒` : `${Math.floor(getProgress(baby) * 100)} %`}</span></div>`).join('');
-  el('result').hidden = false; el('retry-button').focus();
-  if (world) { const b = race.babies[race.winner ?? 0]; world.confetti(b.x, b.z, 100); }
-}
-function updateUI() {
-  if (race.phase !== lastPhase) { if (race.phase === 'racing') audio.cue('start'); syncPhase(); lastPhase = race.phase; }
-  if (race.phase === 'countdown') {
-    const num = Math.ceil(race.countdown); el('countdown-number').textContent = String(Math.max(1, num));
-    if (num !== lastCountdown) { audio.cue('tick'); lastCountdown = num; }
-  }
-  el('timer').textContent = String(Math.ceil(Math.max(0, TIME_LIMIT - race.time))).padStart(2, '0');
-  el('timer-fill').style.width = `${Math.max(0, 1 - race.time / TIME_LIMIT) * 100}%`;
-  el('timer').classList.toggle('urgent', race.time > 50);
-  const ranking = rankBabies(race); el('rank').textContent = `${ranking.findIndex(b => b.id === 0) + 1}位`;
-  const baby = race.babies[0];
-  el('mood-fill').style.width = `${Math.min(100, Math.max(0, baby.mood * 100))}%`;
-  el('mood-caption').textContent = baby.boredom > .6 ? '鳴らしすぎ！ 少し待ってみよう' : baby.state === 'distracted' ? 'おもちゃに夢中！ 近くで呼ぼう' : baby.state === 'rest' ? '近くで鳴らして、もうひとがんばり' : baby.attention < .2 ? 'ベビーの少し前で鳴らしてね' : 'いいリズム！ その調子♪';
-  el<HTMLButtonElement>('super-button').disabled = baby.superUsed || race.phase !== 'racing';
-  el('super-button').querySelector('small')!.textContent = baby.superUsed ? 'つかいきったよ！' : 'ここぞの1回！';
-  const labelPositions = world ? world.babies.map(rig => world.screenPoint(rig.root.position.x, 2.6, rig.root.position.z)) : [];
-  if (labelPositions.length === 2) {
-    const [a, b] = labelPositions;
-    if (Math.abs(a.x - b.x) < 112 && Math.abs(a.y - b.y) < 68) {
-      const offset = (112 - Math.abs(a.x - b.x)) / 2 + 5;
-      const direction = a.x <= b.x ? -1 : 1; a.x += offset * direction; b.x -= offset * direction;
-    }
-    labelPositions.forEach(p => p.x = Math.min(innerWidth - 60, Math.max(60, p.x)));
-  }
-  race.babies.forEach((b, i) => {
-    el(`progress-${i}`).style.left = `${getProgress(b) * 100}%`;
-    el(`status-${i}`).textContent = STATE_LABELS[b.state as keyof typeof STATE_LABELS] ?? b.state;
-    el(`label-${i}`).classList.toggle('awakened', b.state === 'awakening');
-    if (world) {
-      const intro = race.phase === 'ready'; const pos = labelPositions[i];
-      el(`label-${i}`).style.transform = `translate(${pos.x}px, ${pos.y}px) translate(-50%, -100%)`;
-      el(`label-${i}`).hidden = intro || race.phase === 'finished';
-    }
-  });
-  if (world) { const r = race.rattles[0]; const p = world.screenPoint(r.x, 1.8, r.z); el('rattle-hint').style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`; }
-  const priority = (kind: string) => kind === 'legendary' ? 3 : ['super', 'rare', 'finish'].includes(kind) ? 2 : kind === 'good' ? 0 : 1;
-  const pending = race.events.filter(e => e.id > lastEvent).sort((a, b) => priority(b.kind) - priority(a.kind) || b.id - a.id);
-  const event = pending[0];
-  if (event) lastEvent = Math.max(...race.events.map(e => e.id));
-  if (event && (elapsed >= bannerUntil || priority(event.kind) >= bannerPriority)) {
-    bannerPriority = priority(event.kind);
-    el('event-banner').textContent = ['start', 'finish'].includes(event.kind) ? event.text : `${event.babyId === 0 ? '1P' : 'CPU'}！ ${event.text}`;
-    el('event-banner').classList.add('visible'); el('event-banner').classList.toggle('special', /legendary|super|rare/.test(event.kind));
-    bannerUntil = elapsed + 3;
-    if (event.kind === 'legendary' || event.text.includes('立っ') || event.text.includes('覚醒')) { audio.cue('awakening'); const b = race.babies[event.babyId]; if (b) world?.confetti(b.x, b.z, 22); }
-    else if (event.text.includes('アヒル')) audio.cue('duck'); else if (event.text.includes('ペタン')) audio.cue('sit');
-  }
-  if (elapsed > bannerUntil) el('event-banner').classList.remove('visible');
-  if (race.phase === 'finished' && !finishHandled) finish();
-}
-
-function frame(now: number) {
-  const dt = Math.min((now - lastTime) / 1000, .1); lastTime = now;
-  if (!paused) { elapsed += dt; updateInput(dt); updateRace(race, dt); }
-  if (world) world.update(race, elapsed, paused ? 0 : dt);
-  updateUI(); requestAnimationFrame(frame);
-}
-syncPhase(); requestAnimationFrame(frame);
-window.addEventListener('pagehide', () => audio.dispose(), { once: true });
-
-// Read-only diagnostics for reproducible browser checks; no gameplay mutations exposed.
-Object.defineProperty(window, '__babyRace', { get: () => ({
-  phase: race.phase, mode: race.mode, time: race.time, paused,
-  babies: race.babies.map(b => ({id: b.id, x: b.x, z: b.z, state: b.state, progress: getProgress(b), superUsed: b.superUsed})),
-  rattles: race.rattles.map(r => ({x: r.x, z: r.z, pulse: r.pulse})),
-  winner: race.winner, events: race.events.map(e => ({text: e.text, kind: e.kind})),
-}) });
+function frame(now:number){const dt=Math.min((now-lastTime)/1000,.1);lastTime=now;if(!paused){elapsed+=dt;updateInput(dt);updateRace(race,dt);}world?.update(race,elapsed,paused?0:dt);updateUI();requestAnimationFrame(frame);}
+configureRacers();loadCustomFields();syncSound();syncPhase();requestAnimationFrame(frame);
+window.addEventListener('pagehide',()=>audio.dispose(),{once:true});
+Object.defineProperty(window,'__babyRace',{get:()=>({phase:race.phase,mode:race.mode,courseId:race.courseId,humanPlayers:race.humanPlayers,time:race.time,paused,babies:race.babies.map(b=>({id:b.id,name:b.name,isCpu:b.isCpu,style:{...b.style},x:b.x,z:b.z,state:b.state,eventId:b.eventId,zone:b.zone,progress:getProgress(b),superUsed:b.superUsed})),rattles:race.rattles.map(r=>({...r})),winner:race.winner,events:race.events.map(e=>({text:e.text,kind:e.kind,eventId:e.eventId})),discovered:[...records.seen]})});

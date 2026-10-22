@@ -1,43 +1,30 @@
+import { ACCESSORIES, DEFAULT_STYLES, EVENTS, ZONE_LABELS, getCourse, getEvent, type BabyStyle, type CourseId, type CourseZone, type EventId, type ZoneKind } from './content.ts';
+
 /** Deterministic race rules. Forward is -Z; heading 0 faces the finish. */
 export type Mode = 'normal' | 'chaos' | 'skill';
 export type Phase = 'ready' | 'countdown' | 'racing' | 'finished';
 export type BabyState = 'happy' | 'look' | 'distracted' | 'groove' | 'rest' | 'awakening';
 export type AwakeningPhase = 'pose' | 'run' | 'landing';
-
 export interface Baby {
-  id: number;
-  name: string;
-  x: number;
-  z: number;
-  heading: number;
-  state: BabyState;
-  /** Remaining seconds in a timed state; zero means an untimed state. */
+  id: number; name: string; isCpu: boolean; style: BabyStyle;
+  x: number; z: number; heading: number; state: BabyState;
+  /** Remaining effect seconds; zero means an untimed state. */
   stateTime: number;
-  mood: number;
-  attention: number;
-  boredom: number;
-  superUsed: boolean;
-  finishedAt: number | null;
-  event: string;
+  mood: number; attention: number; boredom: number; superUsed: boolean;
+  finishedAt: number | null; event: string;
+  /** Active effect only; cleared on expiry or a super interruption. */
+  eventId: EventId | null;
+  zone: ZoneKind | null;
   awakeningPhase?: AwakeningPhase;
 }
-
-export interface Rattle { x: number; z: number; /** Seconds left in the visible pulse. */ pulse: number }
-export interface RaceEvent { id: number; babyId: number; text: string; kind: string; time: number }
+export interface Rattle { x: number; z: number; pulse: number }
+export interface RaceEvent { id: number; babyId: number; text: string; kind: string; time: number; eventId?: EventId }
 export interface RaceState {
-  phase: Phase;
-  mode: Mode;
-  /** Elapsed racing time, excluding the countdown. */
-  time: number;
-  countdown: number;
-  babies: Baby[];
-  rattles: Rattle[];
-  /** Newest notification first. */
-  events: RaceEvent[];
-  winner: number | null;
-  finishReason?: 'goal' | 'timeout';
+  phase: Phase; mode: Mode; humanPlayers: number; courseId: CourseId;
+  time: number; countdown: number; babies: Baby[]; rattles: Rattle[];
+  events: RaceEvent[]; winner: number | null; finishReason?: 'goal' | 'timeout';
 }
-
+export interface RaceOptions { humanPlayers?: number; courseId?: CourseId; styles?: BabyStyle[] }
 export const COURSE_LENGTH = 34;
 export const COURSE_HALF_WIDTH = 5.5;
 export const START_Z = 14;
@@ -48,203 +35,223 @@ export const STATE_LABELS: Record<BabyState, string> = {
   happy: 'ごきげん', look: 'キョロキョロ', distracted: '寄り道',
   groove: 'ノリノリ', rest: 'ひとやすみ', awakening: 'たっち覚醒！',
 };
-export const DUCK_SPOTS = [
-  { x: -4.2, z: 6 }, { x: 4.2, z: -3 }, { x: -3.9, z: -11.5 },
-] as const;
-
-const STEP = 1 / 60;
-const HEARING_RANGE = 8.5;
-const AWAKE_POSE = 0.65;
-const AWAKE_RUN = 3;
-const AWAKE_LANDING = 0.3;
-const AWAKE_DURATION = AWAKE_POSE + AWAKE_RUN + AWAKE_LANDING;
-
+/** Compatibility export; the chosen course owns its actual duck locations. */
+export const DUCK_SPOTS = getCourse('nursery').duckSpots;
+const STEP = 1 / 60, HEARING_RANGE = 8.5;
+const AWAKE_RUN = 3, AWAKE_LANDING = 0.3, AWAKE_DURATION = 0.65 + AWAKE_RUN + AWAKE_LANDING;
+const LANES = [-3.9, -1.3, 1.3, 3.9];
+const NORMAL_EVENTS = EVENTS.filter(e => e.rarity === 'normal').map(e => e.id);
+const RARE_EVENTS = EVENTS.filter(e => e.rarity === 'rare').map(e => e.id);
+const LEGENDARY_EVENTS = EVENTS.filter(e => e.rarity === 'legendary').map(e => e.id);
+const NEGATIVE = new Set<EventId>(['N01','N02','N03','N04','N05','N06','N07','N08','R03','R05','R06','R07','S05','S08']);
 interface Runtime {
-  rng: number;
-  accumulator: number;
-  clock: number;
-  eventId: number;
-  lastRing: number[];
-  lastAcceptedRing: number[];
-  lastNegative: number[];
-  nextNormal: number[];
-  normalCount: number[];
-  nextGroove: number[];
-  nextBored: number[];
-  distraction: { x: number; z: number }[];
-  superUntil: number[];
-  awakeReady: number[];
-  cpuRing: number;
-  cpuSuper: number;
-  nextRare: number;
-  nextAwake: number;
+  rng: number; accumulator: number; clock: number; notificationId: number;
+  lastRing: number[]; lastAcceptedRing: number[]; lastNegative: number[];
+  eventReady: number[]; specialReady: number[]; nextNormal: number[]; normalCursor: number[];
+  nextGroove: number[]; nextBored: number[];
+  distraction: { x: number; z: number }[]; targetBaby: (number | null)[]; effectElapsed: number[];
+  superUntil: number[]; cpuRing: number[]; cpuSuper: number[]; zoneIndex: number[];
+  rareCursor: number; rareCount: number; nextRare: number; legendaryCursor: number; nextLegendary: number;
 }
-
-// Keeping scheduling data outside the render state prevents the renderer from
-// accidentally coupling animations to random-number draws or AI timers.
+// Rendering cannot consume random draws or advance AI clocks.
 const runtimes = new WeakMap<RaceState, Runtime>();
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 function random(rt: Runtime): number {
-  // Mulberry32: seeded, reproducible, and independent of Math.random().
   rt.rng = (rt.rng + 0x6D2B79F5) >>> 0;
   let value = rt.rng;
   value = Math.imul(value ^ (value >>> 15), value | 1);
   value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
   return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
 }
-
 function runtime(state: RaceState): Runtime {
   const rt = runtimes.get(state);
   if (!rt) throw new Error('Use createRace() to create an active simulation.');
   return rt;
 }
-
-/** Supply a seed for varied replays while retaining deterministic tests. */
-export function createRace(mode: Mode = 'normal', seed = 20261022): RaceState {
-  const babies: Baby[] = ['もちもち', 'ぷくぷく'].map((name, id) => ({
-    id, name, x: id === 0 ? -1.65 : 1.65, z: START_Z, heading: 0,
-    state: 'happy', stateTime: 0, mood: 0.85, attention: 0.68, boredom: 0,
-    superUsed: false, finishedAt: null, event: '',
-  }));
+/** One to four local humans; remaining lanes have independent CPUs. */
+export function createRace(mode: Mode = 'normal', seed = 20261022, options: RaceOptions = {}): RaceState {
+  const humanPlayers = Number.isFinite(options.humanPlayers) ? clamp(Math.floor(options.humanPlayers!), 1, 4) : 1;
+  const course = getCourse(options.courseId ?? 'nursery');
+  const babies: Baby[] = DEFAULT_STYLES.map((fallback, id) => {
+    const selected = options.styles?.[id];
+    const style: BabyStyle = {
+      name: selected?.name?.trim().slice(0, 12) || fallback.name,
+      color: selected?.color && /^#[0-9a-f]{6}$/i.test(selected.color) ? selected.color : fallback.color,
+      accessory: selected && ACCESSORIES.includes(selected.accessory) ? selected.accessory : fallback.accessory,
+    };
+    return { id, name: style.name, style, isCpu: id >= humanPlayers, x: LANES[id], z: START_Z,
+      heading: 0, state: 'happy', stateTime: 0, mood: 0.85, attention: 0.68, boredom: 0,
+      superUsed: false, finishedAt: null, event: '', eventId: null, zone: null };
+  });
   const state: RaceState = {
-    phase: 'ready', mode, time: 0, countdown: 3, babies,
-    rattles: babies.map((baby) => ({ x: baby.x, z: START_Z - 2.9, pulse: 0 })),
-    events: [], winner: null,
+    phase: 'ready', mode, humanPlayers, courseId: course.id, time: 0, countdown: 3, babies,
+    rattles: babies.map(b => ({ x: b.x, z: START_Z - 2.9, pulse: 0 })), events: [], winner: null,
   };
+  const all = (n: number) => babies.map(() => n);
   const rt: Runtime = {
-    rng: Number.isFinite(seed) ? seed >>> 0 : 20261022,
-    accumulator: 0, clock: 0, eventId: 0,
-    lastRing: [-0.5, -0.5], lastAcceptedRing: [-10, -10],
-    lastNegative: [-10, -10], nextNormal: [8, 10], normalCount: [0, 0],
-    nextGroove: [3, 4], nextBored: [0, 0],
-    distraction: babies.map((baby) => ({ x: baby.x, z: baby.z })),
-    superUntil: [-1, -1], awakeReady: [0, 0], cpuRing: 0.2, cpuSuper: 29,
-    nextRare: mode === 'skill' ? Infinity : 17,
-    nextAwake: Infinity,
+    rng: Number.isFinite(seed) ? seed >>> 0 : 20261022, accumulator: 0, clock: 0, notificationId: 0,
+    lastRing: all(-0.5), lastAcceptedRing: all(-10), lastNegative: all(-20), eventReady: all(0), specialReady: all(0),
+    nextNormal: babies.map((_, id) => 8 + id * 1.1), normalCursor: all(0),
+    nextGroove: babies.map((_, id) => 3 + id), nextBored: all(0),
+    distraction: babies.map(b => ({ x: b.x, z: b.z })), targetBaby: babies.map(() => null), effectElapsed: all(0),
+    superUntil: all(-1), cpuRing: babies.map((_, id) => 0.2 + id * 0.12), cpuSuper: all(0), zoneIndex: all(-1),
+    rareCursor: 0, rareCount: 0, nextRare: 16, legendaryCursor: 0, nextLegendary: Infinity,
   };
-  // Normal awakening is deliberately uncommon. The demonstration button can
-  // call triggerAwakening without altering the rarity of ordinary races.
-  if (mode === 'chaos') rt.nextAwake = 12 + random(rt) * 4;
-  else if (mode === 'normal' && random(rt) < 0.28) rt.nextAwake = 24 + random(rt) * 10;
-  rt.cpuSuper += random(rt) * 7;
+  rt.normalCursor = babies.map(() => Math.floor(random(rt) * NORMAL_EVENTS.length));
+  rt.cpuSuper = babies.map((_, id) => 25 + id + random(rt) * 7);
+  rt.rareCursor = Math.floor(random(rt) * RARE_EVENTS.length);
+  rt.legendaryCursor = Math.floor(random(rt) * LEGENDARY_EVENTS.length);
+  rt.nextRare += random(rt) * 3;
+  if (mode === 'chaos') rt.nextLegendary = 11 + random(rt) * 3;
+  else if (mode === 'normal' && random(rt) < 0.28) rt.nextLegendary = 24 + random(rt) * 10;
   runtimes.set(state, rt);
   return state;
 }
-
 export function startRace(state: RaceState): boolean {
   if (state.phase !== 'ready') return false;
-  state.phase = 'countdown';
-  state.countdown = 3;
-  return true;
+  state.phase = 'countdown'; state.countdown = 3; return true;
 }
-
-/** Move only the human's rattle. Babies never teleport with the pointer. */
-export function moveRattle(state: RaceState, x: number, z: number): void {
-  if (state.phase === 'finished' || !Number.isFinite(x) || !Number.isFinite(z)) return;
-  state.rattles[0].x = clamp(x, -COURSE_HALF_WIDTH - 0.5, COURSE_HALF_WIDTH + 0.5);
-  state.rattles[0].z = clamp(z, GOAL_Z - 2.5, START_Z + 1.5);
+/** Moving a selected rattle never directly moves its baby. */
+export function moveRattle(state: RaceState, x: number, z: number, id = 0): void {
+  const rattle = state.rattles[id];
+  if (!rattle || state.phase === 'finished' || !Number.isFinite(x) || !Number.isFinite(z)) return;
+  rattle.x = clamp(x, -COURSE_HALF_WIDTH - 0.5, COURSE_HALF_WIDTH + 0.5);
+  rattle.z = clamp(z, GOAL_Z - 2.5, START_Z + 1.5);
 }
-
-function notify(state: RaceState, baby: Baby, text: string, kind = 'normal'): void {
+function notify(state: RaceState, baby: Baby, text: string, kind = 'normal', eventId?: EventId): void {
   const rt = runtime(state);
   baby.event = text;
-  state.events.unshift({ id: ++rt.eventId, babyId: baby.id, text, kind, time: state.time });
+  state.events.unshift({ id: ++rt.notificationId, babyId: baby.id, text, kind, time: state.time, ...(eventId ? { eventId } : {}) });
   state.events.length = Math.min(state.events.length, 6);
 }
-
 function setState(baby: Baby, value: BabyState, seconds = 0): void {
-  baby.state = value;
-  baby.stateTime = seconds;
+  baby.state = value; baby.stateTime = seconds; baby.eventId = null;
   if (value !== 'awakening') delete baby.awakeningPhase;
 }
-
+function finishEffect(baby: Baby): void { setState(baby, baby.attention < 0.13 ? 'look' : 'happy'); }
+function zoneAt(state: RaceState, baby: Baby): { zone: CourseZone; index: number } | null {
+  const zones = getCourse(state.courseId).zones;
+  const index = zones.findIndex(zone => baby.z <= zone.zStart && baby.z >= zone.zEnd && Math.abs(baby.x - zone.x) <= zone.width / 2);
+  return index < 0 ? null : { zone: zones[index], index };
+}
+function hearingRange(state: RaceState, baby: Baby): number {
+  return HEARING_RANGE * (zoneAt(state, baby)?.zone.kind === 'echo' ? 1.6 : 1);
+}
 export function ringRattle(state: RaceState, id = 0): boolean {
   if (state.phase !== 'racing' && state.phase !== 'countdown') return false;
-  const baby = state.babies[id];
-  const rattle = state.rattles[id];
+  const baby = state.babies[id], rattle = state.rattles[id];
   if (!baby || !rattle || baby.finishedAt !== null) return false;
-  const rt = runtime(state);
-  const interval = rt.clock - rt.lastAcceptedRing[id];
+  const rt = runtime(state), interval = rt.clock - rt.lastAcceptedRing[id];
   if (interval < 0.075) return false;
-  rt.lastAcceptedRing[id] = rt.clock;
-  rattle.pulse = 0.48;
+  rt.lastAcceptedRing[id] = rt.clock; rattle.pulse = 0.48;
   const distance = Math.hypot(rattle.x - baby.x, rattle.z - baby.z);
-  if (distance > HEARING_RANGE && rt.superUntil[id] < state.time) return true;
-
+  if (distance > hearingRange(state, baby) && rt.superUntil[id] < state.time) return true;
   rt.lastRing[id] = rt.clock;
   const spam = interval < 0.38;
   baby.boredom = clamp(baby.boredom + (spam ? 0.19 : 0.015), 0, 1);
-  baby.attention = clamp(baby.attention + 0.48 * (1 - baby.boredom * 0.7), 0, 1);
+  baby.attention = clamp(baby.attention + 0.48 * (1 - baby.boredom * 0.7) * (baby.eventId === 'N05' ? 0.2 : 1), 0, 1);
   baby.mood = clamp(baby.mood + (spam ? -0.045 : 0.035), 0.2, 1);
-
   if (state.phase === 'countdown') return true;
-  if (baby.boredom > 0.77 && state.time >= rt.nextBored[id] && baby.state !== 'awakening') {
-    setState(baby, 'look', 1.35);
-    baby.attention = 0.18;
-    rt.nextBored[id] = state.time + 8;
-    rt.lastNegative[id] = state.time;
-    notify(state, baby, 'ガラガラ飽きた…', 'warning');
+  if (baby.boredom > 0.77 && state.time >= rt.nextBored[id] && !baby.eventId) {
+    if (triggerEvent(state, 'N05', id)) rt.nextBored[id] = state.time + 8;
     return true;
   }
-
-  // Close, well-timed calls can interrupt ordinary distractions. Repeated
-  // frantic taps remain less useful because boredom reduces attention.
-  if (distance < 5 && !spam) {
+  if (distance < 5 && !spam && baby.eventId !== 'N05' && !baby.eventId?.startsWith('S')) {
     if (baby.state === 'distracted') {
       baby.stateTime = Math.max(0, baby.stateTime - 1.1);
-      if (baby.stateTime === 0) setState(baby, 'happy');
+      if (baby.stateTime === 0) finishEffect(baby);
     } else if (baby.state === 'rest') {
       baby.stateTime = baby.stateTime <= 0.95 ? 0 : baby.stateTime - 0.18;
-      if (baby.stateTime === 0) setState(baby, 'happy');
-    }
-    else if (baby.state === 'look' && baby.stateTime <= 0.8) setState(baby, 'happy');
+      if (baby.stateTime === 0) finishEffect(baby);
+    } else if (baby.state === 'look' && baby.stateTime <= 0.8) finishEffect(baby);
   }
-  if (baby.state === 'happy' && interval >= 0.65 && interval <= 1.6 &&
-      baby.attention > 0.75 && baby.boredom < 0.3 && state.time >= rt.nextGroove[id]) {
-    setState(baby, 'groove', 1.7);
-    rt.nextGroove[id] = state.time + 9;
-    notify(state, baby, 'ノリノリ♪', 'good');
+  if (baby.state === 'happy' && !baby.eventId && interval >= 0.65 && interval <= 1.6 && baby.attention > 0.75 && baby.boredom < 0.3 && state.time >= rt.nextGroove[id]) {
+    setState(baby, 'groove', 1.7); rt.nextGroove[id] = state.time + 9; notify(state, baby, 'ノリノリ♪', 'good');
   }
   return true;
 }
-
 export function useSuper(state: RaceState, id = 0): boolean {
   const baby = state.babies[id];
   if (state.phase !== 'racing' || !baby || baby.superUsed || baby.finishedAt !== null) return false;
   const rt = runtime(state);
-  baby.superUsed = true;
-  baby.attention = 1;
-  baby.boredom = 0;
-  baby.mood = 1;
-  rt.lastRing[id] = rt.clock;
-  rt.superUntil[id] = state.time + 3.4;
-  state.rattles[id].pulse = 1.3;
-  if (baby.state !== 'awakening') setState(baby, 'groove', 3.4);
-  notify(state, baby, 'スーパーガラガラ！', 'super');
-  return true;
+  baby.superUsed = true; baby.attention = 1; baby.boredom = 0; baby.mood = 1;
+  rt.lastRing[id] = rt.clock; rt.superUntil[id] = state.time + 3.4; state.rattles[id].pulse = 1.3;
+  if (!baby.eventId?.startsWith('S')) setState(baby, 'groove', 3.4);
+  notify(state, baby, 'スーパーガラガラ！', 'super'); return true;
 }
-
-/** A manual showcase respects the same mode and consecutive-event guards. */
-export function triggerAwakening(state: RaceState, id = 0): boolean {
-  const baby = state.babies[id];
-  if (state.phase !== 'racing' || state.mode === 'skill' || !baby ||
-      baby.finishedAt !== null || baby.state === 'awakening') return false;
+function nearestRival(state: RaceState, baby: Baby): Baby | undefined {
+  return state.babies.filter(other => other.id !== baby.id && other.finishedAt === null)
+    .sort((a, b) => Math.hypot(a.x - baby.x, a.z - baby.z) - Math.hypot(b.x - baby.x, b.z - baby.z) || a.id - b.id)[0];
+}
+function applyEffect(state: RaceState, baby: Baby, eventId: EventId, value: BabyState, duration: number): void {
   const rt = runtime(state);
-  if (state.time < rt.awakeReady[id]) return false;
-  setState(baby, 'awakening', AWAKE_DURATION);
-  baby.awakeningPhase = 'pose';
-  baby.attention = Math.max(0.6, baby.attention);
-  rt.lastRing[id] = rt.clock;
-  rt.awakeReady[id] = state.time + AWAKE_DURATION + 14;
-  notify(state, baby, '突然立ったーー！！', 'legendary');
-  return true;
+  const seconds = NEGATIVE.has(eventId) && baby.z < GOAL_Z + 4 ? Math.min(duration, 0.65) : duration;
+  setState(baby, value, seconds); baby.eventId = eventId;
+  rt.effectElapsed[baby.id] = 0; rt.targetBaby[baby.id] = null; rt.eventReady[baby.id] = state.time + seconds + 1.5;
+  if (NEGATIVE.has(eventId)) rt.lastNegative[baby.id] = state.time;
+  if (eventId.startsWith('S')) {
+    baby.awakeningPhase = eventId === 'S01' ? 'pose' : 'run';
+    rt.specialReady[baby.id] = state.time + seconds + 14;
+  }
 }
-
-export function getProgress(baby: Pick<Baby, 'z'>): number {
-  return clamp((START_Z - baby.z) / COURSE_LENGTH, 0, 1);
+/** Catalog/demo and natural schedules use the same guards and effect rules. */
+export function triggerEvent(state: RaceState, eventId: EventId, babyId = 0): boolean {
+  const baby = state.babies[babyId], definition = getEvent(eventId);
+  if (state.phase !== 'racing' || !baby || !definition || baby.finishedAt !== null || baby.eventId || (state.mode === 'skill' && definition.rarity === 'legendary')) return false;
+  const rt = runtime(state);
+  if (state.time < rt.eventReady[babyId] || (definition.rarity === 'legendary' && state.time < rt.specialReady[babyId]) || (NEGATIVE.has(eventId) && state.time - rt.lastNegative[babyId] < 7)) return false;
+  const effect = (value: BabyState, duration: number) => applyEffect(state, baby, eventId, value, duration);
+  const rival = nearestRival(state, baby);
+  switch (eventId) {
+    case 'N01': {
+      effect('distracted', 2.9);
+      const spot = [...getCourse(state.courseId).duckSpots].sort((a, b) => Math.abs(a.z - baby.z) - Math.abs(b.z - baby.z))[0];
+      rt.distraction[babyId] = { x: spot.x, z: clamp(spot.z, baby.z - 1.5, baby.z + 1.5) }; break;
+    }
+    case 'N02': effect('look', 1.15); break;
+    case 'N03': effect('rest', 1.65); break;
+    case 'N04': effect('distracted', 2); rt.targetBaby[babyId] = rival?.id ?? null; break;
+    case 'N05': effect('look', 1.5); baby.attention = 0.12; baby.boredom = Math.max(baby.boredom, 0.86); break;
+    case 'N06': effect('happy', 1.6); baby.heading += Math.PI; break;
+    case 'N07': effect('rest', 1); break;
+    case 'N08': effect('rest', 0.3); baby.heading += babyId % 2 ? -0.15 : 0.15; break;
+    case 'R01': effect('groove', 2.2); break;
+    case 'R02': effect('groove', 2.6); break;
+    case 'R03': {
+      effect('distracted', 2.2); rt.targetBaby[babyId] = rival?.id ?? null;
+      if (rival && Math.hypot(rival.x - baby.x, rival.z - baby.z) < 5 && !rival.eventId && state.time >= rt.eventReady[rival.id] && state.time - rt.lastNegative[rival.id] >= 7) {
+        applyEffect(state, rival, eventId, 'distracted', 1.5); rt.targetBaby[rival.id] = babyId;
+        notify(state, rival, '赤ちゃん渋滞に合流！', 'rare', eventId);
+      } break;
+    }
+    case 'R04': effect('groove', 2); baby.mood = 1; break;
+    case 'R05': {
+      effect('rest', 0.65);
+      for (const other of state.babies) {
+        if (other.id === babyId || other.finishedAt !== null || other.eventId || Math.hypot(other.x - baby.x, other.z - baby.z) > 5 || state.time < rt.eventReady[other.id] || state.time - rt.lastNegative[other.id] < 7) continue;
+        applyEffect(state, other, eventId, 'rest', 0.85); other.mood = 1;
+        notify(state, other, 'つられてキャッキャッ！', 'rare', eventId);
+      }
+      baby.mood = 1; break;
+    }
+    case 'R06': effect('happy', 1.5); break;
+    case 'R07': effect('distracted', 3); rt.distraction[babyId] = { x: baby.x > 0 ? -4.8 : 4.8, z: baby.z - 0.6 }; break;
+    case 'R08': effect('groove', 2.5); baby.attention = 1; break;
+    case 'S01': effect('awakening', AWAKE_DURATION); break;
+    case 'S02': effect('awakening', 3.2); break;
+    case 'S03': effect('awakening', 2.6); break;
+    case 'S04': effect('awakening', 2.5); break;
+    case 'S05': effect('awakening', 1.05); baby.heading = Math.PI; break;
+    case 'S06': effect('awakening', 3.1); break;
+    case 'S07': effect('awakening', 2.6); break;
+    case 'S08': effect('rest', 1); baby.heading = Math.PI; break;
+  }
+  if (definition.rarity !== 'normal') { baby.attention = Math.max(0.8, baby.attention); rt.lastRing[babyId] = rt.clock; }
+  const text = eventId === 'S01' ? '突然立ったーー！！' : definition.name + (definition.name.endsWith('！') ? '' : '！');
+  notify(state, baby, text, definition.rarity === 'normal' ? 'warning' : definition.rarity, eventId); return true;
 }
-
+export function triggerAwakening(state: RaceState, id = 0): boolean { return triggerEvent(state, 'S01', id); }
+export function getProgress(baby: Pick<Baby, 'z'>): number { return clamp((START_Z - baby.z) / COURSE_LENGTH, 0, 1); }
 export function rankBabies(state: Pick<RaceState, 'babies'>): Baby[] {
   return [...state.babies].sort((a, b) => {
     if (a.finishedAt !== null && b.finishedAt !== null) return a.finishedAt - b.finishedAt || a.id - b.id;
@@ -253,128 +260,117 @@ export function rankBabies(state: Pick<RaceState, 'babies'>): Baby[] {
     return getProgress(b) - getProgress(a) || a.id - b.id;
   });
 }
-
 function turnTowards(heading: number, desired: number, maxTurn: number): number {
   const difference = Math.atan2(Math.sin(desired - heading), Math.cos(desired - heading));
   return heading + clamp(difference, -maxTurn, maxTurn);
 }
-
-function ordinaryEvent(state: RaceState, baby: Baby): void {
-  const rt = runtime(state);
-  const id = baby.id;
-  const closeToGoal = baby.z < GOAL_Z + 4;
-  const duck = rt.normalCount[id] % 2 === 0 && !closeToGoal;
-  rt.normalCount[id] += 1;
-  rt.lastNegative[id] = state.time;
-  if (duck) {
-    const spot = [...DUCK_SPOTS].sort((a, b) => Math.abs(a.z - baby.z) - Math.abs(b.z - baby.z))[0];
-    rt.distraction[id] = { x: spot.x, z: clamp(spot.z, baby.z - 1.5, baby.z + 1.5) };
-    setState(baby, 'distracted', 2.7 + random(rt) * 0.6);
-    notify(state, baby, 'アヒルさん発見！', 'warning');
-  } else {
-    setState(baby, 'rest', closeToGoal ? 0.65 : 1.5 + random(rt) * 0.4);
-    notify(state, baby, 'おしりペタン', 'warning');
-  }
-}
-
 function updateCpu(state: RaceState, dt: number): void {
   const rt = runtime(state);
-  const baby = state.babies[1];
-  if (baby.finishedAt !== null) return;
-  const target = state.rattles[1];
-  const lane = 1.65 + Math.sin(state.time * 0.3) * 0.7;
-  target.x += (lane - target.x) * Math.min(1, dt * 3);
-  target.z = Math.max(GOAL_Z - 2, baby.z - 3.25);
-  if (state.time >= rt.cpuRing) {
-    ringRattle(state, 1);
-    rt.cpuRing = state.time + 0.95 + random(rt) * 0.36;
+  for (const baby of state.babies) {
+    if (!baby.isCpu || baby.finishedAt !== null) continue;
+    const id = baby.id, target = state.rattles[id];
+    const lane = LANES[id] + Math.sin(state.time * 0.31 + id * 1.4) * 0.55;
+    target.x += (lane - target.x) * Math.min(1, dt * 3); target.z = Math.max(GOAL_Z - 2, baby.z - 3.25);
+    if (state.time >= rt.cpuRing[id]) { ringRattle(state, id); rt.cpuRing[id] = state.time + 0.94 + random(rt) * 0.36; }
+    if (state.time >= rt.cpuSuper[id] && !baby.superUsed) useSuper(state, id);
   }
-  if (state.time >= rt.cpuSuper && !baby.superUsed) useSuper(state, 1);
 }
-
 function updateSchedules(state: RaceState): void {
   const rt = runtime(state);
   for (const baby of state.babies) {
     if (baby.finishedAt !== null || state.time < rt.nextNormal[baby.id]) continue;
-    if (baby.state === 'awakening' || baby.state === 'rest' || baby.state === 'distracted' ||
-        state.time - rt.lastNegative[baby.id] < 7) {
-      rt.nextNormal[baby.id] = state.time + 1;
-      continue;
-    }
-    ordinaryEvent(state, baby);
-    rt.nextNormal[baby.id] = state.time + (state.mode === 'chaos' ? 8 : 12) + random(rt) * 5;
+    const eventId = NORMAL_EVENTS[rt.normalCursor[baby.id] % NORMAL_EVENTS.length];
+    if (triggerEvent(state, eventId, baby.id)) {
+      rt.normalCursor[baby.id] += 1;
+      rt.nextNormal[baby.id] = state.time + (state.mode === 'chaos' ? 8 : 14) + random(rt) * 4;
+    } else rt.nextNormal[baby.id] = state.time + 0.8;
   }
   if (state.time >= rt.nextRare) {
-    const choices = state.babies.filter((baby) => baby.finishedAt === null && baby.state === 'happy');
-    if (choices.length) {
-      const baby = choices[Math.floor(random(rt) * choices.length)];
-      setState(baby, 'groove', 2.2);
-      notify(state, baby, 'おしりジェット！', 'rare');
-      rt.nextRare = state.time + (state.mode === 'chaos' ? 10 : 22);
-    } else rt.nextRare = state.time + 0.5;
+    const choices = state.babies.filter(b => b.finishedAt === null && !b.eventId && state.time >= rt.eventReady[b.id]);
+    const baby = choices[Math.floor(random(rt) * choices.length)], eventId = RARE_EVENTS[rt.rareCursor % RARE_EVENTS.length];
+    if (baby && triggerEvent(state, eventId, baby.id)) {
+      rt.rareCursor += 1; rt.rareCount += 1;
+      rt.nextRare = state.mode !== 'chaos' && rt.rareCount >= 2 ? Infinity : state.time + (state.mode === 'chaos' ? 8 : 18) + random(rt) * 3;
+    } else rt.nextRare = state.time + 0.8;
   }
-  if (state.time >= rt.nextAwake) {
-    const choices = state.babies.filter((baby) => baby.finishedAt === null && baby.state !== 'awakening');
+  if (state.time >= rt.nextLegendary) {
+    const eventId = LEGENDARY_EVENTS[rt.legendaryCursor % LEGENDARY_EVENTS.length];
+    const choices = state.babies.filter(b => b.finishedAt === null && !b.eventId && state.time >= rt.eventReady[b.id] && (eventId !== 'S08' || b.z < GOAL_Z + 6));
     const baby = choices[Math.floor(random(rt) * choices.length)];
-    if (baby && triggerAwakening(state, baby.id)) {
-      rt.nextAwake = state.mode === 'chaos' ? state.time + 21 : Infinity;
-    } else rt.nextAwake = state.time + 1;
+    if (baby && triggerEvent(state, eventId, baby.id)) {
+      rt.legendaryCursor += 1;
+      rt.nextLegendary = state.mode === 'chaos' ? state.time + 16 + random(rt) * 3 : Infinity;
+    } else rt.nextLegendary = state.time + 0.8;
   }
 }
-
-function updateBaby(state: RaceState, baby: Baby, dt: number): void {
+function updateBaby(state: RaceState, baby: Baby, dt: number, lastPlaceId: number, leadingProgress: number): void {
   if (baby.finishedAt !== null) return;
-  const rt = runtime(state);
-  const id = baby.id;
+  const rt = runtime(state), id = baby.id, entry = zoneAt(state, baby);
+  baby.zone = entry?.zone.kind ?? null;
+  if ((entry?.index ?? -1) !== rt.zoneIndex[id]) {
+    rt.zoneIndex[id] = entry?.index ?? -1;
+    if (entry) notify(state, baby, ZONE_LABELS[entry.zone.kind], 'zone');
+  }
   baby.boredom = Math.max(0, baby.boredom - dt * 0.105);
   baby.attention = Math.max(0, baby.attention - dt * (baby.boredom > 0.6 ? 0.27 : 0.16));
   baby.mood = Math.max(0.3, baby.mood - dt * 0.002);
-
   if (baby.stateTime > 0) {
-    baby.stateTime = Math.max(0, baby.stateTime - dt);
-    if (baby.stateTime === 0) setState(baby, baby.attention < 0.13 ? 'look' : 'happy');
+    baby.stateTime = Math.max(0, baby.stateTime - dt); rt.effectElapsed[id] += dt;
+    if (baby.stateTime < 1e-8) finishEffect(baby);
   }
-  if (baby.state === 'awakening') {
-    baby.awakeningPhase = baby.stateTime > AWAKE_RUN + AWAKE_LANDING ? 'pose' :
-      baby.stateTime > AWAKE_LANDING ? 'run' : 'landing';
-  }
-  if (baby.state === 'rest' || (baby.state === 'awakening' && baby.awakeningPhase !== 'run')) return;
-  if (baby.state === 'look') return;
-
-  const rattle = state.rattles[id];
-  const isAwake = baby.state === 'awakening';
-  const isSuper = state.time <= rt.superUntil[id];
-  const distracted = baby.state === 'distracted';
-  const target = distracted ? rt.distraction[id] : rattle;
-  const dx = target.x - baby.x;
-  const dz = target.z - baby.z;
-  const distance = Math.hypot(dx, dz);
-  const recentCall = rt.clock - rt.lastRing[id] < (isSuper ? 4 : 3.1);
-  if (!distracted && !isAwake && !isSuper &&
-      (!recentCall || baby.attention < 0.12 || distance > HEARING_RANGE)) {
+  const eventId = baby.eventId;
+  if (eventId === 'S01') baby.awakeningPhase = baby.stateTime > AWAKE_RUN + AWAKE_LANDING ? 'pose' : baby.stateTime > AWAKE_LANDING ? 'run' : 'landing';
+  if (baby.state === 'rest' || baby.state === 'look' || (baby.state === 'awakening' && baby.awakeningPhase !== 'run')) return;
+  const rattle = state.rattles[id], isAwake = baby.state === 'awakening', isSuper = state.time <= rt.superUntil[id], distracted = baby.state === 'distracted';
+  const other = rt.targetBaby[id] === null ? undefined : state.babies[rt.targetBaby[id]!];
+  const target = distracted ? other ?? rt.distraction[id] : rattle;
+  let dx = target.x - baby.x, dz = target.z - baby.z;
+  const distance = Math.hypot(dx, dz), recentCall = rt.clock - rt.lastRing[id] < (isSuper ? 4 : baby.zone === 'echo' ? 4.6 : 3.1);
+  if (!distracted && !isAwake && !isSuper && eventId !== 'N06' && eventId !== 'R06' && (!recentCall || baby.attention < 0.12 || distance > hearingRange(state, baby))) {
     if (baby.attention < 0.14 || !recentCall) setState(baby, 'look');
     return;
   }
-  const desired = Math.atan2(dx, -dz);
-  baby.heading = turnTowards(baby.heading, desired, dt * (isAwake ? 0.9 : 4.3));
-  const leadingProgress = Math.max(...state.babies.map(getProgress));
-  const catchUp = 1 + clamp((leadingProgress - getProgress(baby)) * 0.18, 0, 0.045);
-  let speed = BASE_SPEED * (0.94 + baby.mood * 0.09) * catchUp;
-  if (isAwake) speed *= 2;
-  else if (isSuper) speed *= 1.42;
-  else if (baby.state === 'groove') speed *= baby.event === 'おしりジェット！' ? 1.75 : 1.24;
-  if (distracted) speed *= 0.63;
-  if (!isAwake) speed *= clamp((distance - 0.42) / 1.05, 0, 1);
+  if (baby.zone === 'toy' && !distracted && !isAwake && entry) {
+    const attraction = recentCall && baby.attention > 0.6 ? 0.12 : 0.3;
+    dx = dx * (1 - attraction) + (entry.zone.x - baby.x) * attraction;
+    dz = dz * (1 - attraction) + ((entry.zone.zStart + entry.zone.zEnd) / 2 - baby.z) * attraction;
+  }
+  let desired = Math.atan2(dx, -dz), turnRate = isAwake ? 0.9 : 4.3, multiplier = 1;
+  switch (eventId) {
+    case 'N06': turnRate = 0.7; break;
+    case 'R01': multiplier = 1.75; break;
+    case 'R02': multiplier = 1.58; turnRate = 0.75; break;
+    case 'R04': multiplier = 1.85; break;
+    case 'R06': baby.heading += dt * 10; desired = baby.heading; multiplier = 0.18; break;
+    case 'R07': multiplier = 1.25; break;
+    case 'R08': multiplier = 1.5 + clamp((leadingProgress - getProgress(baby)) * 0.6, 0, 0.15); break;
+    case 'S01': multiplier = 2; break;
+    case 'S02': multiplier = Math.floor(rt.effectElapsed[id] * 7) % 2 === 0 ? 2.4 : 0.9; turnRate = 0.38; break;
+    case 'S03': multiplier = 0.66; desired += Math.sin(rt.effectElapsed[id] * 4) * 0.38; turnRate = 2; break;
+    case 'S04': multiplier = 2.2; desired += Math.sin(rt.effectElapsed[id] * 8) * 0.85; turnRate = 8; break;
+    case 'S05': multiplier = 1.7; desired = Math.PI; turnRate = 9; break;
+    case 'S06': multiplier = 1.7; turnRate = 3.6; break;
+    case 'S07': multiplier = 1.6; desired = Math.atan2(dx * 2.5, -dz); turnRate = 8.5; break;
+    default: if (baby.state === 'groove') multiplier = 1.24;
+  }
+  baby.heading = turnTowards(baby.heading, desired, dt * turnRate);
+  const catchUp = id === lastPlaceId ? 1 + clamp((leadingProgress - getProgress(baby)) * 0.18, 0, 0.045) : 1;
+  let speed = BASE_SPEED * (0.94 + baby.mood * 0.09) * catchUp * multiplier;
+  if (isSuper) speed *= isAwake ? 1.05 : 1.42 / (baby.state === 'groove' && !eventId ? 1.24 : 1);
+  if (distracted) speed *= eventId === 'R07' ? 0.95 : 0.63;
+  if (baby.zone === 'cushion') speed *= 0.64;
+  if (baby.zone === 'sprint') speed *= 1.2;
+  if (baby.zone === 'toy') speed *= 0.94;
+  if (!isAwake && eventId !== 'R06') speed *= clamp((distance - 0.42) / 1.05, 0, 1);
   const previousZ = baby.z;
-  baby.x = clamp(baby.x + Math.sin(baby.heading) * speed * dt, -COURSE_HALF_WIDTH, COURSE_HALF_WIDTH);
+  const ballNudge = baby.zone === 'ball' ? Math.sin(state.time * 2.6 + id * 2.3) * 0.55 * dt : 0;
+  baby.x = clamp(baby.x + Math.sin(baby.heading) * speed * dt + ballNudge, -COURSE_HALF_WIDTH, COURSE_HALF_WIDTH);
   baby.z = clamp(baby.z - Math.cos(baby.heading) * speed * dt, GOAL_Z - 0.1, START_Z + 0.6);
   if (baby.z <= GOAL_Z) {
     const fraction = previousZ === baby.z ? 1 : clamp((previousZ - GOAL_Z) / (previousZ - baby.z), 0, 1);
-    baby.finishedAt = state.time - dt + fraction * dt;
-    baby.z = GOAL_Z;
+    baby.finishedAt = state.time - dt + fraction * dt; baby.z = GOAL_Z;
   }
 }
-
 function tick(state: RaceState, dt: number): void {
   const rt = runtime(state);
   rt.clock += dt;
@@ -382,46 +378,30 @@ function tick(state: RaceState, dt: number): void {
   if (state.phase === 'countdown') {
     state.countdown = Math.max(0, state.countdown - dt);
     if (state.countdown < 1e-8) {
-      state.countdown = 0;
-      state.phase = 'racing';
-      rt.lastRing = [rt.clock, rt.clock];
+      state.countdown = 0; state.phase = 'racing'; rt.lastRing = state.babies.map(() => rt.clock);
       notify(state, state.babies[0], 'よーい、ハイハイ！', 'start');
     }
     return;
   }
   if (state.phase !== 'racing') return;
   const raceStep = Math.min(dt, TIME_LIMIT - state.time);
-  state.time += raceStep;
-  updateCpu(state, raceStep);
-  updateSchedules(state);
-  for (const baby of state.babies) updateBaby(state, baby, raceStep);
+  state.time += raceStep; updateCpu(state, raceStep); updateSchedules(state);
+  const rankingBefore = rankBabies(state), lastPlaceId = rankingBefore[rankingBefore.length - 1].id, leadingProgress = getProgress(rankingBefore[0]);
+  for (const baby of state.babies) updateBaby(state, baby, raceStep, lastPlaceId, leadingProgress);
   const ranking = rankBabies(state);
   if (ranking[0].finishedAt !== null) {
-    state.phase = 'finished';
-    state.winner = ranking[0].id;
-    state.finishReason = 'goal';
-    notify(state, ranking[0], 'ゴーーール！', 'finish');
+    state.phase = 'finished'; state.winner = ranking[0].id; state.finishReason = 'goal'; notify(state, ranking[0], 'ゴーーール！', 'finish');
   } else if (state.time >= TIME_LIMIT - 1e-8) {
-    state.time = TIME_LIMIT;
-    state.phase = 'finished';
-    state.winner = ranking[0].id;
-    state.finishReason = 'timeout';
-    notify(state, ranking[0], 'タイムアップ！', 'finish');
+    state.time = TIME_LIMIT; state.phase = 'finished'; state.winner = ranking[0].id; state.finishReason = 'timeout'; notify(state, ranking[0], 'タイムアップ！', 'finish');
   }
 }
-
-/** Fixed 60Hz simulation keeps AI and event schedules independent of FPS. */
+/** Fixed 60Hz simulation keeps all AI and event schedules independent of FPS. */
 export function updateRace(state: RaceState, dt: number): void {
-  if (!Number.isFinite(dt) || dt <= 0 || state.phase === 'ready') return;
+  if (!Number.isFinite(dt) || dt <= 0 || state.phase === 'ready' || state.phase === 'finished') return;
   const rt = runtime(state);
-  // A suspended browser must not create an unbounded catch-up loop.
   rt.accumulator += Math.min(dt, 120);
   while (rt.accumulator >= STEP - 1e-10) {
-    tick(state, STEP);
-    rt.accumulator = Math.max(0, rt.accumulator - STEP);
-    if (state.phase === 'finished') {
-      rt.accumulator = 0;
-      break;
-    }
+    tick(state, STEP); rt.accumulator = Math.max(0, rt.accumulator - STEP);
+    if ((state.phase as Phase) === 'finished') { rt.accumulator = 0; break; }
   }
 }
