@@ -7,11 +7,16 @@ type Snapshot = {
   events: {text: string; kind: string}[];
 };
 const snapshot = (page: Page) => page.evaluate(() => (window as unknown as {__babyRace: Snapshot}).__babyRace);
+const openGame = async (page: Page) => {
+  // Decorative fonts must not make local gameplay tests depend on Google uptime.
+  await page.route(/^https:\/\/fonts\.(?:googleapis|gstatic)\.com\//, route => route.abort());
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+};
 
 test('a complete race supports guidance, super, pause, awakening, result and replay', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/');
+  await openGame(page);
   await expect(page.locator('#start-button')).toBeVisible();
   await expect(page.locator('#game-canvas')).toBeVisible();
   await expect(page.locator('#webgl-error')).toBeHidden();
@@ -59,7 +64,7 @@ test('a complete race supports guidance, super, pause, awakening, result and rep
 test('portrait mobile keeps controls on screen and accepts touch guidance', async ({ browser }) => {
   const context = await browser.newContext({ viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
   const page = await context.newPage();
-  await page.goto('/');
+  await openGame(page);
   await expect(page.locator('#start-button')).toBeInViewport();
   await page.screenshot({ path: 'test-results/title-mobile.png' });
   await page.locator('#start-button').tap();
