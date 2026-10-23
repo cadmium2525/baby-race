@@ -349,9 +349,9 @@ test('runway baby keeps its neck forward during the closeup and resumed race', a
   test.setTimeout(70_000);
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  // Natural S03 seed for the 31-event pool. Update this seed when that pool or
+  // Natural S03 seed for the 36-event pool. Update this seed when that pool or
   // scheduling changes; keep the real input and simulation path intact.
-  await page.addInitScript(() => { Date.now = () => 77; });
+  await page.addInitScript(() => { Date.now = () => 311; });
   await openGame(page);
   await page.locator('[data-mode="chaos"]').click();
   await start(page);

@@ -291,6 +291,47 @@ export class GameAudio {
         });
         this.notes([392,440,587,659,880],.09,.17,'triangle',.2,3.25);
         break;
+      case 'S14':
+        this.notes([262,349,440,523,440,523,698],.19,.2,'triangle',.22);
+        [1.6,2.15,2.7].forEach(delay=>this.tone(210,.09,delay,'sine',.18,150));
+        this.notes([349,440,523,698],.12,.24,'square',.045,3.1);
+        this.tone(349,.45,3.5,'triangle',.16);
+        break;
+      case 'S15':
+        [0,.5,1.05,1.6,2.15,2.7].forEach((delay,i)=>{
+          this.tone(i%2?120:165,.15,delay,'triangle',.26,75);
+          this.shake(delay+.03,.13,500);
+        });
+        this.giggle(.65,3,.7);
+        this.notes([196,262,294,392],.12,.18,'triangle',.2,3.05);
+        break;
+      case 'S16':
+        this.notes([523,659,587,784,659],.13,.13,'triangle',.2);
+        this.giggle(.8,5,1.05);
+        [1.6,2.05,2.5].forEach(delay=>{
+          this.shake(delay,.15,2100);
+          this.tone(1047,.1,delay+.08,'sine',.15,1319);
+        });
+        this.notes([659,784,1047,1319],.1,.2,'triangle',.2,3.15);
+        break;
+      case 'S17':
+        this.notes([440,554,659,880,1109],.12,.3,'sine',.15);
+        [1.1,1.8,2.5].forEach((delay,i)=>{
+          this.tone([554,659,740][i],.4,delay,'triangle',.14);
+          this.tone([831,988,1109][i],.35,delay+.08,'sine',.09);
+          this.shake(delay+.05,.065,5400);
+        });
+        this.notes([659,880,1109,1320],.12,.27,'sine',.16,3.05);
+        break;
+      case 'S18':
+        for(let i=0;i<10;i++) {
+          const delay=i*.32, pitch=[784,1047,1319,988,1568][i%5];
+          this.tone(pitch,.075,delay,'square',.045);
+          this.tone(pitch*1.25,.09,delay+.11,'sine',.13);
+          if(i%2===0)this.tone(125,.13,delay,'sine',.22,48);
+        }
+        this.notes([1047,1319,1568],.1,.18,'triangle',.18,3.4);
+        break;
     }
   }
 

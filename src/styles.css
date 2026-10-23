@@ -472,6 +472,19 @@ body[data-phase='ready'] .menu-footer { pointer-events: none; }
 .cinematic-overlay[data-event='S11'] .cinematic-track i { background: #65b1ca; }
 .cinematic-overlay[data-event='S12'] .cinematic-track i { background: #d95560; }
 .cinematic-overlay[data-event='S13'] .cinematic-track i { background: #b18c4e; }
+.cinematic-overlay[data-event='S14'] { color: #4c608e; box-shadow: inset 0 9px #8a9bc8c7,inset 0 -9px #8a9bc8c7; }
+.cinematic-overlay[data-event='S14'] .cinematic-copy { padding: 12px 18px; border: 1px solid #d5dce9; border-radius: 18px; background: #fffdf5f2; box-shadow: 0 6px 28px #4c608e14; text-shadow: none; }
+.cinematic-overlay[data-event='S14'] .cinematic-copy p { color: #4c608e; }
+.cinematic-overlay[data-event='S15'] { color: #8a5a32; box-shadow: inset 0 9px #c59969c7,inset 0 -9px #c59969c7; }
+.cinematic-overlay[data-event='S16'] { color: #ac5b31; box-shadow: inset 0 9px #e9ae66c7,inset 0 -9px #e9ae66c7; }
+.cinematic-overlay[data-event='S17'] { color: #88549b; box-shadow: inset 0 9px #bd8ccfc7,inset 0 -9px #bd8ccfc7; }
+.cinematic-overlay[data-event='S18'] { color: #367c93; box-shadow: inset 0 9px #76c9d6c7,inset 0 -9px #76c9d6c7; }
+.cinematic-overlay:is([data-event='S14'],[data-event='S15'],[data-event='S16'],[data-event='S17'],[data-event='S18']) .cinematic-heading > span { color: inherit; letter-spacing: .08em; }
+.cinematic-overlay[data-event='S14'] .cinematic-track i { background: #7486b8; }
+.cinematic-overlay[data-event='S15'] .cinematic-track i { background: #b58c58; }
+.cinematic-overlay[data-event='S16'] .cinematic-track i { background: #d88e49; }
+.cinematic-overlay[data-event='S17'] .cinematic-track i { background: #ac78c2; }
+.cinematic-overlay[data-event='S18'] .cinematic-track i { background: #5db6c5; }
 body[data-cinematic='true'] .race-hud, body[data-cinematic='true'] .course-badge,
 body[data-cinematic='true'] .labels-overlay, body[data-cinematic='true'] .bottom-hud,
 body[data-cinematic='true'] .event-banner, body[data-cinematic='true'] .mobile-ring,
@@ -493,6 +506,7 @@ body[data-cinematic='true'] .controls-hint { visibility: hidden !important; }
   .cinematic-overlay[data-event='S11'] .cinematic-copy h2,
   .cinematic-overlay[data-event='S12'] .cinematic-copy h2,
   .cinematic-overlay[data-event='S13'] .cinematic-copy h2 { font-size: 25px; }
+  .cinematic-overlay:is([data-event='S14'],[data-event='S15'],[data-event='S16'],[data-event='S17'],[data-event='S18']) .cinematic-copy h2 { font-size: 25px; }
   .cinematic-copy > span { font-size: 10px; }
   .cinematic-copy p { font-size: 11px; margin-top: 7px; padding: 0 8px; }
   .cinematic-skip { bottom: calc(23px + env(safe-area-inset-bottom)); right: 20px; font-size: 10px; min-height: 36px; }

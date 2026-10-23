@@ -225,8 +225,98 @@ function buildHappenings(root: THREE.Group, body: THREE.Group, head: THREE.Group
   for (const x of [-.32, .32]) box(dohyo, 0xfff5dc, [x, .178, 0], [.055, .025, .65], .008);
   const sumoDust = new THREE.Group(); root.add(sumoDust); sumoDust.visible = false;
   for (const side of [-1, 1]) ball(sumoDust, 0xe9d8ba, [side * .58, .22, .55], [.28, .16, .3]);
+
+  const pmHair = new THREE.Group(); head.add(pmHair); pmHair.visible = false;
+  ball(pmHair, 0x68515b, [0, .28, .1], [.62, .37, .53]);
+  for (const side of [-1, 1]) ball(pmHair, 0x68515b, [side * .48, -.01, .11], [.18, .4, .29]);
+  ball(pmHair, 0x68515b, [0, .37, -.35], [.47, .18, .16]);
+  const pmSuit = new THREE.Group(); body.add(pmSuit); pmSuit.visible = false;
+  modeColors.push(ball(pmSuit, color, [0, .66, .25], [.5, .4, .61]));
+  // These babies stand by tilting their crawling torso. Keep tailoring upright
+  // on the visible belly rather than hiding it behind the raised head.
+  const pmTailoring = new THREE.Group(); pmTailoring.position.set(0, .3, .08); pmTailoring.rotation.x = -.912; pmSuit.add(pmTailoring);
+  for (const side of [-1, 1]) { const lapel = box(pmTailoring, 0xfff9ec, [side * .13, .12, -.08], [.13, .4, .035], .02); lapel.rotation.set(-.3, 0, side * -.3); }
+  for (let i = 0; i < 7; i++) ball(pmTailoring, 0xfff9ed, [(i - 3) * .065, .28 + Math.abs(i - 3) * .025, -.12], [.04, .04, .03]);
+  const podium = new THREE.Group(); root.add(podium); podium.visible = false;
+  modeColors.push(box(podium, color, [0, .73, -1.07], [.96, 1.15, .55], .08));
+  box(podium, 0xfff5dc, [0, 1.33, -1.07], [1.1, .12, .7], .035);
+  ball(podium, 0xfffaf1, [0, .74, -1.36], [.12, .21, .03]);
+  box(podium, 0xb3d9e5, [0, .96, -1.36], [.16, .065, .045], .015);
+  tube(podium, 0x655d6b, [new THREE.Vector3(.4, 1.38, -.96), new THREE.Vector3(.44, 1.66, -.91), new THREE.Vector3(.36, 1.75, -.77)], .024);
+  ball(podium, 0x514b5b, [.36, 1.75, -.77], [.07, .1, .07]);
+
+  const caveHair = new THREE.Group(); head.add(caveHair); caveHair.visible = false;
+  ball(caveHair, 0x6e584d, [0, .34, .08], [.6, .29, .5]);
+  for (let i = 0; i < 5; i++) { const spike = new THREE.Mesh(new THREE.ConeGeometry(.15, .35, 5), material(0x6e584d)); spike.position.set((i - 2) * .18, .6, .02); spike.rotation.z = (i - 2) * -.25; caveHair.add(spike); }
+  for (const side of [-1, 1]) { const bone = box(caveHair, 0xfff1d3, [side * .14, .53, -.31], [.35, .065, .065], .03); bone.rotation.z = side * .5; ball(caveHair, 0xfff1d3, [side * .3, .61, -.31], [.075, .065, .065]); }
+  const caveFur = new THREE.Group(); body.add(caveFur); caveFur.visible = false;
+  modeColors.push(ball(caveFur, color, [0, .65, .26], [.51, .4, .6]));
+  for (let i = 0; i < 6; i++) {
+    const x = (i % 2 ? 1 : -1) * .2, z = Math.floor(i / 2) * .25;
+    const belly = .65 - .4 * Math.sqrt(Math.max(.02, 1 - (x / .51) ** 2 - ((z - .26) / .6) ** 2));
+    ball(caveFur, i % 2 ? 0xa98961 : 0x80684f, [x, belly - .02, z], [.085, .025, .065]);
+  }
+  const caveClub = new THREE.Group(); body.add(caveClub); caveClub.visible = false;
+  const clubHandle = new THREE.Mesh(new THREE.CapsuleGeometry(.06, .42, 4, 10), material(0xbc9870)); clubHandle.position.y = .25; caveClub.add(clubHandle);
+  ball(caveClub, 0xb18b63, [0, .62, 0], [.2, .3, .19]);
+  for (const side of [-1, 1]) ball(caveClub, 0xc7a781, [side * .12, .63, -.12], [.07, .09, .05]);
+
+  const auntHair = new THREE.Group(); head.add(auntHair); auntHair.visible = false;
+  for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; ball(auntHair, i % 2 ? 0x66515f : 0x796171, [Math.cos(a) * .48, .23 + Math.sin(a) * .35, .12], [.19, .2, .22]); }
+  for (let i = 0; i < 5; i++) ball(auntHair, 0x735c6a, [(i - 2) * .18, .39, -.33], [.15, .17, .14]);
+  const auntLeopard = new THREE.Group(); body.add(auntLeopard); auntLeopard.visible = false;
+  modeColors.push(ball(auntLeopard, color, [0, .66, .25], [.51, .4, .63]));
+  for (let i = 0; i < 8; i++) {
+    const x = (i % 2 ? 1 : -1) * .2, z = -.05 + Math.floor(i / 2) * .17;
+    const belly = .66 - .4 * Math.sqrt(Math.max(.02, 1 - (x / .51) ** 2 - ((z - .25) / .63) ** 2));
+    ball(auntLeopard, 0x665345, [x, belly - .018, z], [.08, .025, .065]); ball(auntLeopard, 0xd6b98f, [x, belly - .042, z], [.036, .012, .03]);
+  }
+  const auntBag = new THREE.Group(); body.add(auntBag); auntBag.visible = false;
+  modeColors.push(box(auntBag, color, [0, 0, 0], [.46, .4, .24], .09));
+  const bagHandle = new THREE.Mesh(new THREE.TorusGeometry(.16, .035, 8, 22), material(0xe4c795)); bagHandle.position.y = .26; auntBag.add(bagHandle);
+  const auntCandy = new THREE.Group(); body.add(auntCandy); auntCandy.visible = false;
+  for (let i = 0; i < 3; i++) { const candyColor = [0xe8a8b9, 0x9dcee0, 0xf0d17e][i], x = (i - 1) * .22; ball(auntCandy, candyColor, [x, 0, 0], [.085, .075, .07]); for (const side of [-1, 1]) { const wrap = box(auntCandy, candyColor, [x + side * .09, 0, 0], [.075, .055, .045], .015); wrap.rotation.z = side * .4; } }
+
+  const hostHair = new THREE.Group(); head.add(hostHair); hostHair.visible = false;
+  ball(hostHair, 0x62566f, [0, .35, .07], [.61, .29, .5]);
+  for (let i = 0; i < 6; i++) { const quiff = new THREE.Mesh(new THREE.ConeGeometry(.14, .38, 5), material(i % 2 ? 0x71617d : 0x62566f)); quiff.position.set((i - 2.5) * .16, .64, -.03); quiff.rotation.z = -.35; hostHair.add(quiff); }
+  ball(hostHair, 0x71617d, [-.15, .33, -.36], [.33, .15, .15]);
+  const hostSuit = new THREE.Group(); body.add(hostSuit); hostSuit.visible = false;
+  modeColors.push(ball(hostSuit, color, [0, .66, .25], [.5, .4, .61]));
+  const hostTailoring = new THREE.Group(); hostTailoring.position.set(0, .3, .08); hostTailoring.rotation.x = -.931; hostSuit.add(hostTailoring);
+  for (const side of [-1, 1]) { const lapel = box(hostTailoring, 0x5d526a, [side * .12, .12, -.08], [.13, .4, .035], .015); lapel.rotation.set(-.3, 0, side * -.28); }
+  box(hostTailoring, 0xfff5e7, [0, .29, -.12], [.16, .18, .035], .02);
+  const hostRose = new THREE.Group(); body.add(hostRose); hostRose.visible = false;
+  box(hostRose, 0x86ab8b, [0, .22, 0], [.035, .45, .035], .012);
+  for (let i = 0; i < 5; i++) ball(hostRose, i % 2 ? 0xe684a7 : 0xed9ab7, [Math.sin(i * 2.4) * .075, .48 + Math.cos(i * 2.4) * .04, Math.cos(i * 2.4) * .065], [.085, .075, .075]);
+  const milkTower = new THREE.Group(); milkTower.position.set(-.98, .18, -.45); root.add(milkTower); milkTower.visible = false;
+  for (let row = 0; row < 3; row++) for (let col = 0; col < 3 - row; col++) {
+    const glass = new THREE.Group(); glass.position.set((col - (2 - row) / 2) * .29, row * .38, 0); milkTower.add(glass);
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(.13, .08, .18, 12), material(0xfffae9)); bowl.position.y = .25; glass.add(bowl);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(.018, .018, .15, 8), material(0xd8e9ec)); stem.position.y = .095; glass.add(stem);
+    ball(glass, 0xd8e9ec, [0, .015, 0], [.1, .017, .1]);
+  }
+  const hostStars = new THREE.Group(); root.add(hostStars); hostStars.visible = false;
+  for (let i = 0; i < 5; i++) sparkle(hostStars, i % 2 ? 0xf4d995 : 0xf2c5d9, Math.sin(i * 2.4) * 1.0, .8 + i * .26, .35 + Math.cos(i * 2.4) * .5, .12);
+
+  const dopaHeadphones = new THREE.Group(); head.add(dopaHeadphones); dopaHeadphones.visible = false;
+  const headphoneBand = tube(dopaHeadphones, color, [new THREE.Vector3(-.63, .1, .04), new THREE.Vector3(-.5, .64, .04), new THREE.Vector3(0, .77, .04), new THREE.Vector3(.5, .64, .04), new THREE.Vector3(.63, .1, .04)], .065); modeColors.push(headphoneBand);
+  for (const side of [-1, 1]) { modeColors.push(ball(dopaHeadphones, color, [side * .63, .025, .035], [.18, .28, .23])); ball(dopaHeadphones, 0x686178, [side * .77, .025, .035], [.075, .19, .17]); }
+  const gamepad = new THREE.Group(); gamepad.position.set(0, .1, -.15); body.add(gamepad); gamepad.visible = false;
+  modeColors.push(box(gamepad, color, [0, 0, 0], [.72, .28, .28], .09));
+  for (const side of [-1, 1]) modeColors.push(ball(gamepad, color, [side * .28, -.1, 0], [.15, .17, .14]));
+  box(gamepad, 0x64596c, [-.17, .03, -.155], [.17, .045, .025], .01); box(gamepad, 0x64596c, [-.17, .03, -.155], [.045, .15, .025], .01);
+  for (let i = 0; i < 4; i++) ball(gamepad, [0xedacbc, 0xb2dbbd, 0xf0d38e, 0xbab4e3][i], [.19 + Math.sin(i * Math.PI / 2) * .065, .03 + Math.cos(i * Math.PI / 2) * .065, -.16], [.027, .027, .018]);
+  const notifications = new THREE.Group(); root.add(notifications); notifications.visible = false;
+  const notificationCards: THREE.Group[] = [];
+  for (let i = 0; i < 4; i++) {
+    const card = new THREE.Group(); card.position.set((i % 2 ? 1 : -1) * (.86 + Math.floor(i / 2) * .12), 1.1 + i * .27, .2); notifications.add(card);
+    box(card, [0xe7c1dc, 0xc1dce8, 0xe4d9ac, 0xc6dfcf][i], [0, 0, 0], [.43, .32, .06], .075);
+    sparkle(card, 0xfffcf1, 0, 0, -.05, .09); notificationCards.push(card);
+  }
   return { changing, wipes, wipe, freshDiaper, cleanDiaper, poop, cleanStars, droppedPacifier, pacifierColors, tears, tearDrops, chorus, cryBuddies, makeup, partyHair, party, disco, partyStars,
     oyajiFace, oyajiBand, oyajiDust, gymHead, gymTrail, heroHead, heroCostume, cape, heroAura, sumoMawashi, sumoHair, dohyo, sumoDust, modeColors,
+    pmHair, pmSuit, podium, caveHair, caveFur, caveClub, auntHair, auntLeopard, auntBag, auntCandy, hostHair, hostSuit, hostRose, milkTower, hostStars, dopaHeadphones, gamepad, notifications, notificationCards,
     gymGroundClearance: null as number | null, phase: '', cryingCount: 0 };
 }
 interface DoublePart { source: THREE.Object3D; copy: THREE.Object3D }
@@ -234,7 +324,9 @@ interface DoublePart { source: THREE.Object3D; copy: THREE.Object3D }
  * with the original; only the translucent materials belong to these doubles. */
 function buildDoubles(body: THREE.Group, head: THREE.Group, happenings: ReturnType<typeof buildHappenings>, root = new THREE.Group()) {
   const excluded = new Set<THREE.Object3D>([happenings.cleanDiaper, happenings.tears, happenings.makeup, happenings.partyHair,
-    happenings.oyajiFace, happenings.oyajiBand, happenings.gymHead, happenings.heroHead, happenings.heroCostume, happenings.sumoMawashi, happenings.sumoHair]);
+    happenings.oyajiFace, happenings.oyajiBand, happenings.gymHead, happenings.heroHead, happenings.heroCostume, happenings.sumoMawashi, happenings.sumoHair,
+    happenings.pmHair, happenings.pmSuit, happenings.caveHair, happenings.caveFur, happenings.caveClub, happenings.auntHair, happenings.auntLeopard, happenings.auntBag, happenings.auntCandy,
+    happenings.hostHair, happenings.hostSuit, happenings.hostRose, happenings.dopaHeadphones, happenings.gamepad]);
   const privateMaterials = new Map<THREE.Material, THREE.Material>();
   const copies: {anchor: THREE.Group; head: THREE.Object3D; parts: DoublePart[]}[] = [];
   const translucent = (source: THREE.Material) => {
@@ -280,6 +372,10 @@ function buildBaby(style: BabyStyle, skin: number) {
   const speedLines = new THREE.Group(); for (let i = 0; i < 3; i++) box(speedLines, 0xfffbef, [(i - 1) * .5, .14, 1.2 + (i % 2) * .35], [.045, .035, .8 + (i % 2) * .5], .015);
   root.add(speedLines); speedLines.visible = false;
   const happenings = buildHappenings(root, body, head, color, skin);
+  limbs[2].add(happenings.caveClub); happenings.caveClub.position.set(.1, -.5, -.32);
+  limbs[0].add(happenings.auntBag); happenings.auntBag.position.set(-.1, -.42, .12);
+  limbs[2].add(happenings.auntCandy); happenings.auntCandy.position.set(-.05, -.65, -.36);
+  limbs[2].add(happenings.hostRose); happenings.hostRose.position.set(.05, -.56, -.34);
   const doubles = buildDoubles(body, head, happenings); const ghosts = doubles.root; root.add(ghosts);
   const presentation = { baby: null as Baby | null, eventId: null as EventId | null, lastStateTime: 0, showcased: false, animationOffset: 0, cutElapsed: 0, inCut: false, startedAt: 0, visualElapsed: 0 };
   return { root, acro, body, head, limbs, speedLines, clothing, accessory, eyes, eyeHighlights, eyebrows, mouth, pacifier, ghosts, doubles, happenings, presentation, accessoryKind: style.accessory, styleKey: `${style.color}/${style.accessory}` };
@@ -396,7 +492,7 @@ export class GameWorld {
     const rig = this.babies[index], out = this.moodScreens[index];
     if (!rig || !out) return { x: 0, y: 0, visible: false };
     const h = rig.happenings;
-    const height = h.partyHair.visible ? 1.0 : h.sumoHair.visible ? .95 : h.heroHead.visible || h.gymHead.visible || h.oyajiFace.visible ? .85 : rig.accessoryKind === 'bunny' ? 1.5 : rig.accessoryKind === 'crown' ? 1.15 : .82;
+    const height = h.partyHair.visible || h.caveHair.visible || h.dopaHeadphones.visible ? 1.0 : h.hostHair.visible ? 1.1 : h.sumoHair.visible || h.auntHair.visible ? .95 : h.heroHead.visible || h.gymHead.visible || h.oyajiFace.visible || h.pmHair.visible ? .85 : rig.accessoryKind === 'bunny' ? 1.5 : rig.accessoryKind === 'crown' ? 1.15 : .82;
     rig.head.updateWorldMatrix(true, false);
     this.moodScratch.set(0, height, 0); rig.head.localToWorld(this.moodScratch); this.moodScratch.project(this.camera);
     out.x = (this.moodScratch.x + 1) / 2 * this.width; out.y = (1 - this.moodScratch.y) / 2 * this.height;
@@ -443,7 +539,8 @@ export class GameWorld {
       else if (cinematic.eventId === 'R09') faceAngle -= .38;
       const frontX = -Math.sin(faceAngle), frontZ = -Math.cos(faceAngle);
       const partyWide = cinematic.eventId === 'S09' ? THREE.MathUtils.smoothstep(cinematic.elapsed, 1.2, 1.8) : 0;
-      const newForm = cinematic.eventId === 'S10' || cinematic.eventId === 'S11' || cinematic.eventId === 'S12' || cinematic.eventId === 'S13';
+      const newForm = cinematic.eventId === 'S10' || cinematic.eventId === 'S11' || cinematic.eventId === 'S12' || cinematic.eventId === 'S13' || cinematic.eventId === 'S14' || cinematic.eventId === 'S15' || cinematic.eventId === 'S16' || cinematic.eventId === 'S17' || cinematic.eventId === 'S18';
+      const latestForm = cinematic.eventId === 'S14' || cinematic.eventId === 'S15' || cinematic.eventId === 'S16' || cinematic.eventId === 'S17' || cinematic.eventId === 'S18';
       const formWide = newForm ? THREE.MathUtils.smoothstep(cinematic.elapsed, .75, 1.4) : 0;
       const formY = cinematic.eventId === 'S11' ? 1.85 : cinematic.eventId === 'S13' ? 1.15 : 1.35;
       const runwayBunny = cinematic.eventId === 'S03' && baby.style.accessory === 'bunny';
@@ -455,9 +552,9 @@ export class GameWorld {
       this.camera.quaternion.copy(this.savedRotation).slerp(this.closeRotation, amount);
       const distance = THREE.MathUtils.lerp(this.cameraOffset.length(), Math.hypot(12, 4), amount);
       this.camera.position.set(0, 0, distance).applyQuaternion(this.camera.quaternion).add(this.target);
-      const fullHeight = cinematic.eventId === 'S11' ? 5.8 : cinematic.eventId === 'S10' ? 4.0 : 4.4;
-      const fullWidth = cinematic.eventId === 'S11' ? 4.8 : cinematic.eventId === 'S13' ? 4.1 : 3.7;
-      const closeHeight = newForm ? Math.max(THREE.MathUtils.lerp(3.1, fullHeight, formWide), THREE.MathUtils.lerp(2.75, fullWidth, formWide) / aspect)
+      const fullHeight = cinematic.eventId === 'S11' ? 5.8 : cinematic.eventId === 'S10' ? 4.0 : latestForm ? 4.5 : 4.4;
+      const fullWidth = cinematic.eventId === 'S11' ? 4.8 : cinematic.eventId === 'S17' ? 4.4 : cinematic.eventId === 'S13' ? 4.1 : latestForm ? 3.9 : 3.7;
+      const closeHeight = newForm ? Math.max(THREE.MathUtils.lerp(latestForm ? 3.5 : 3.1, fullHeight, formWide), THREE.MathUtils.lerp(2.75, fullWidth, formWide) / aspect)
         : cinematic.eventId === 'S03' ? Math.max(runwayBunny ? 4.8 : 4.3, (runwayBunny ? 3.3 : 3.05) / aspect)
         : cinematic.eventId === 'S06' ? Math.max(3.8, 5.6 / aspect) : cinematic.eventId === 'S09' ? Math.max(THREE.MathUtils.lerp(3.0, 4.2, partyWide), THREE.MathUtils.lerp(2.65, 3.5, partyWide) / aspect)
         : cinematic.eventId === 'R10' ? Math.max(4.05, 3.35 / aspect) : cinematic.eventId === 'R09' ? Math.max(3.9, 3.25 / aspect) : Math.max(3.45, 2.65 / aspect);
@@ -542,9 +639,14 @@ export class GameWorld {
     h.gymHead.visible = event === 'S11'; h.gymTrail.visible = false; h.gymGroundClearance = null;
     h.heroHead.visible = h.heroCostume.visible = h.heroAura.visible = event === 'S12';
     h.sumoMawashi.visible = h.sumoHair.visible = event === 'S13'; h.dohyo.visible = h.sumoDust.visible = false;
+    h.pmHair.visible = h.pmSuit.visible = event === 'S14'; h.podium.visible = false;
+    h.caveHair.visible = h.caveFur.visible = h.caveClub.visible = event === 'S15';
+    h.auntHair.visible = h.auntLeopard.visible = h.auntBag.visible = event === 'S16'; h.auntCandy.visible = false;
+    h.hostHair.visible = h.hostSuit.visible = h.hostRose.visible = h.hostStars.visible = event === 'S17'; h.milkTower.visible = false;
+    h.dopaHeadphones.visible = h.gamepad.visible = h.notifications.visible = event === 'S18';
     h.cape.rotation.set(-.95, 0, 0);
     h.phase = '';
-    const newForm = event === 'S10' || event === 'S11' || event === 'S12' || event === 'S13';
+    const newForm = event === 'S10' || event === 'S11' || event === 'S12' || event === 'S13' || event === 'S14' || event === 'S15' || event === 'S16' || event === 'S17' || event === 'S18';
     rig.accessory.visible = event !== 'S09' && !newForm; rig.pacifier.visible = event !== 'S09' && event !== 'R10' && !newForm;
     rig.mouth.visible = event !== 'S09'; rig.mouth.material = material(0xf2a9a5);
     for (const highlight of rig.eyeHighlights) highlight.visible = event !== 'R10';
@@ -699,6 +801,71 @@ export class GameWorld {
         }
         break;
       }
+      case 'S14': {
+        const running = !preview && b.awakeningPhase === 'run', clock = rig.presentation.visualElapsed;
+        stand(.96); rig.body.position.y += .14; h.phase = running ? 'pm-dash' : 'pm-speech';
+        rig.head.rotation.y = Math.sin(clock * 2) * .1; rig.head.rotation.z = -.04;
+        if (running) { fast(20, .5); rig.speedLines.visible = true; }
+        else {
+          h.podium.visible = true;
+          rig.limbs[0].rotation.set(-.4, 0, -.5); rig.limbs[2].rotation.set(.6 + Math.sin(clock * 4) * .15 * motion, 0, 1.0);
+          rig.limbs[1].rotation.x = -.1; rig.limbs[3].rotation.x = .1;
+          rig.mouth.scale.y = .07 + Math.abs(Math.sin(clock * 8)) * .03;
+        }
+        break;
+      }
+      case 'S15': {
+        const clock = rig.presentation.visualElapsed, stride = Math.sin(clock * 16);
+        stand(.88); rig.body.position.y += .14 + Math.abs(stride) * .06 * motion; h.phase = 'cave-dash';
+        rig.body.rotation.y = Math.sin(clock * 3) * .1 * motion; rig.head.rotation.y = -.08;
+        rig.limbs[0].rotation.set(stride * .5, 0, -.5); rig.limbs[2].rotation.set(-.5 - stride * .35, 0, .65);
+        rig.limbs[1].rotation.x = stride * .5; rig.limbs[3].rotation.x = -stride * .5;
+        // Cancel the crawling torso/arm tilt so the club rises beside the face,
+        // with its handle still attached to the moving hand.
+        h.caveClub.quaternion.copy(rig.body.quaternion).multiply(rig.limbs[2].quaternion).invert();
+        h.caveClub.rotateZ(-.35); h.caveClub.rotateX(-.2); rig.speedLines.visible = true;
+        break;
+      }
+      case 'S16': {
+        const running = !preview && b.awakeningPhase === 'run', clock = rig.presentation.visualElapsed;
+        stand(.94); rig.body.position.y += .14; h.phase = running ? 'aunt-dash' : 'aunt-candy';
+        rig.head.rotation.z = Math.sin(clock * 3) * .07 * motion; rig.head.rotation.y = .08;
+        rig.limbs[0].rotation.set(-.2, 0, -.3);
+        h.auntBag.rotation.set(.1, 0, Math.sin(clock * (running ? 9 : 3)) * .12 * motion);
+        if (running) { fast(18, .45); rig.speedLines.visible = true; }
+        else {
+          h.auntCandy.visible = true; rig.limbs[2].rotation.set(.65, -.25, .95 + Math.sin(clock * 3) * .12 * motion);
+          rig.limbs[1].rotation.x = -.1; rig.limbs[3].rotation.x = .1;
+        }
+        h.auntCandy.quaternion.copy(rig.body.quaternion).multiply(rig.limbs[2].quaternion).invert();
+        break;
+      }
+      case 'S17': {
+        const running = !preview && b.awakeningPhase === 'run', clock = rig.presentation.visualElapsed;
+        stand(.98); rig.body.position.y += .14; h.phase = running ? 'host-dash' : 'host-wink';
+        rig.head.rotation.z = -.1; rig.head.rotation.y = .1; h.hostStars.rotation.y = clock * .2;
+        if (running) { fast(22, .55); rig.limbs[2].rotation.z = .75; rig.speedLines.visible = true; }
+        else {
+          h.milkTower.visible = true;
+          rig.eyes[0].scale.y = .015; rig.eyeHighlights[0].visible = false;
+          rig.limbs[0].rotation.set(.6, 0, -.7); rig.limbs[2].rotation.set(.55, 0, .9);
+          rig.limbs[1].rotation.x = -.2; rig.limbs[3].rotation.x = .2;
+        }
+        h.hostRose.quaternion.copy(rig.body.quaternion).multiply(rig.limbs[2].quaternion).invert(); h.hostRose.rotateZ(-.15);
+        break;
+      }
+      case 'S18': {
+        const clock = rig.presentation.visualElapsed, burst = Math.floor(clock * 3) % 2 === 0;
+        stand(.92); rig.body.position.y += .14 + Math.abs(Math.sin(clock * 8)) * .07 * motion;
+        h.phase = burst ? 'dopa-burst' : 'dopa-play'; rig.body.rotation.y = Math.sin(clock * 5) * .1 * motion; rig.head.rotation.z = Math.sin(clock * 4) * .06 * motion;
+        rig.limbs[0].rotation.set(-.7, 0, .4); rig.limbs[2].rotation.set(-.7, 0, -.4);
+        h.gamepad.quaternion.copy(rig.body.quaternion).invert();
+        rig.limbs[1].rotation.x = Math.sin(clock * 18) * .42; rig.limbs[3].rotation.x = -Math.sin(clock * 18) * .42;
+        // Motion stays gentle and every icon remains steadily lit: no strobe.
+        for (let i = 0; i < h.notificationCards.length; i++) { h.notificationCards[i].rotation.z = Math.sin(clock * 1.8 + i) * .12 * motion; h.notificationCards[i].position.y = 1.1 + i * .27 + Math.sin(clock * 1.8 + i) * .045 * motion; }
+        rig.speedLines.visible = true;
+        break;
+      }
     }
     if (event !== 'S05') rig.speedLines.rotation.y = 0;
     if (!event && b.state === 'awakening') { stand(); fast(23); rig.speedLines.visible = b.awakeningPhase === 'run'; }
@@ -732,6 +899,11 @@ export class GameWorld {
       gymHeadband: rig.happenings.gymHead.visible, gymTrail: rig.happenings.gymTrail.visible, gymGroundClearance: rig.happenings.gymGroundClearance,
       heroVisor: rig.happenings.heroHead.visible, heroCape: rig.happenings.heroCostume.visible,
       sumoMawashi: rig.happenings.sumoMawashi.visible, sumoHair: rig.happenings.sumoHair.visible, dohyo: rig.happenings.dohyo.visible,
+      pmBob: rig.happenings.pmHair.visible, pmSuit: rig.happenings.pmSuit.visible, podium: rig.happenings.podium.visible,
+      caveHair: rig.happenings.caveHair.visible, caveFur: rig.happenings.caveFur.visible, caveClub: rig.happenings.caveClub.visible,
+      auntPerm: rig.happenings.auntHair.visible, auntLeopard: rig.happenings.auntLeopard.visible, auntBag: rig.happenings.auntBag.visible, auntCandy: rig.happenings.auntCandy.visible,
+      hostHair: rig.happenings.hostHair.visible, hostSuit: rig.happenings.hostSuit.visible, hostRose: rig.happenings.hostRose.visible, milkTower: rig.happenings.milkTower.visible,
+      dopaHeadphones: rig.happenings.dopaHeadphones.visible, gamepad: rig.happenings.gamepad.visible, notifications: rig.happenings.notifications.visible,
     }));
   }
   dispose() {

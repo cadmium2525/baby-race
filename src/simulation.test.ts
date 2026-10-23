@@ -422,15 +422,15 @@ test('zone notifications occur on entry, not every frame', () => {
   assert.equal(entries(), 2);
 });
 
-test('all 31 catalog events occur naturally and added spectacles appear regularly in both modes', () => {
-  assert.equal(EVENTS.length, 31);
-  assert.equal(new Set(EVENTS.map(event => event.id)).size, 31);
-  const added: EventId[] = ['R09', 'R10', 'S09', 'S10', 'S11', 'S12', 'S13'];
+test('all 36 catalog events occur naturally and added spectacles appear regularly in both modes', () => {
+  assert.equal(EVENTS.length, 36);
+  assert.equal(new Set(EVENTS.map(event => event.id)).size, 36);
+  const added: EventId[] = ['R09', 'R10', 'S09', 'S10', 'S11', 'S12', 'S13', 'S14', 'S15', 'S16', 'S17', 'S18'];
   for (const mode of ['normal', 'chaos'] as const) {
     const encountered = new Set<EventId>();
     const novelCounts = Object.fromEntries(added.map(id => [id, 0]));
     let racesWithNew = 0;
-    for (let seed = 0; seed < 64; seed++) {
+    for (let seed = 0; seed < 128; seed++) {
       const { notifications } = collectRace(mode, seed);
       const raceIds = new Set(notifications.flatMap(event => event.eventId ? [event.eventId] : []));
       raceIds.forEach(id => encountered.add(id));
@@ -439,7 +439,7 @@ test('all 31 catalog events occur naturally and added spectacles appear regularl
     }
     assert.deepEqual([...encountered].sort(), EVENTS.map(event => event.id).sort(), mode);
     for (const [id, count] of Object.entries(novelCounts)) assert.ok(count >= (id.startsWith('R') ? 12 : 4), mode + ' ' + id);
-    assert.ok(racesWithNew >= (mode === 'normal' ? 40 : 48));
+    assert.ok(racesWithNew >= (mode === 'normal' ? 80 : 96));
   }
 });
 
@@ -505,7 +505,7 @@ test('normal accidents arrive in the opening seconds and remain lively, while ch
   let normalFirstLegendary = 0, chaosFirstLegendary = 0;
   let chaosStationary = 0;
   let normalLegendaryRaces = 0;
-  const negative = new Set<EventId>(['N01','N02','N03','N04','N05','N06','N07','N08','R03','R05','R06','R07','R09','R10','S05','S08','S09','S10','S12','S13']);
+  const negative = new Set<EventId>(['N01','N02','N03','N04','N05','N06','N07','N08','R03','R05','R06','R07','R09','R10','S05','S08','S09','S10','S12','S13','S14','S16','S17']);
   for (let seed = 0; seed < 32; seed++) {
     for (const mode of ['normal', 'chaos'] as const) {
       const { state, notifications, stationaryFraction } = collectRace(mode, seed);
@@ -540,7 +540,9 @@ test('normal accidents arrive in the opening seconds and remain lively, while ch
         // An early S08 selection must not postpone every legendary until the goal.
         assert.ok(legendary[0].time >= 6 && legendary[0].time < 12);
         chaosFirstLegendary += legendary[0].time;
-        assert.ok(legendary.length >= 3);
+        // A race may finish while all four babies are still protected from the
+        // next pose act. Keep that protection and verify the average budget.
+        assert.ok(legendary.length >= 2);
         chaosOrdinary += ordinary.length;
         chaosRare += rare.length;
         chaosLegendary += legendary.length;
@@ -565,6 +567,7 @@ test('normal accidents arrive in the opening seconds and remain lively, while ch
   // Minor setbacks share protection with spectacles. Verify more spectacles
   // and more events overall without demanding extra forced interruptions.
   assert.ok(chaosOrdinary >= normalOrdinary * 0.9);
+  assert.ok(chaosLegendary / 32 >= 3);
   assert.ok(chaosRare + chaosLegendary > (normalRare + normalLegendary) * 1.4);
   assert.ok(chaosOrdinary + chaosRare + chaosLegendary > (normalOrdinary + normalRare + normalLegendary) * 1.1);
   assert.ok(chaosStationary / 32 < 0.1);
@@ -759,6 +762,9 @@ const COSTUME_ACTS = [
   { id: 'S10', pose: 1.6, run: 2, speed: 1.5 },
   { id: 'S12', pose: 1.4, run: 2.4, speed: 2 },
   { id: 'S13', pose: 1.6, run: 2.2, speed: 1.7 },
+  { id: 'S14', pose: 1.4, run: 2.4, speed: 1.7 },
+  { id: 'S16', pose: 1.6, run: 2.4, speed: 1.65 },
+  { id: 'S17', pose: 1.4, run: 2.2, speed: 1.9 },
 ] as const;
 
 for (const act of COSTUME_ACTS) {
@@ -861,5 +867,75 @@ test('new awakenings can affect CPUs and preserve an eventual CPU finish', () =>
     assert.equal(state.finishReason, 'goal');
     assert.ok(state.winner !== null && state.babies[state.winner].isCpu);
     assert.ok(state.time < TIME_LIMIT);
+  }
+});
+
+test('primitive running begins immediately, arcs gently, accepts a rattle and recovers', () => {
+  const state = racing('normal', 3, { humanPlayers: 4 });
+  const baby = state.babies[0];
+  baby.x = 0; baby.z = 12;
+  moveRattle(state, 0, 4);
+  assert.equal(triggerEvent(state, 'S15'), true);
+  assert.equal(baby.awakeningPhase, 'run');
+  assert.equal(baby.stateTime, 3.6);
+  updateRace(state, 0.6);
+  assert.ok(12 - baby.z > BASE_SPEED * 1.8 * 0.6 * 0.94);
+  assert.ok(Math.abs(baby.x) > 0.03);
+  assert.ok(Math.abs(baby.heading) < 0.4);
+  moveRattle(state, -3, baby.z - 4);
+  ringRattle(state);
+  updateRace(state, 0.5);
+  assert.ok(baby.heading < -0.1);
+  updateRace(state, 2.6);
+  assert.equal(baby.eventId, null);
+  assert.equal(baby.awakeningPhase, undefined);
+  assert.notEqual(baby.state, 'awakening');
+  assert.equal(triggerEvent(racing('skill'), 'S15'), false);
+});
+
+test('notification excitement alternates low and high speed about every 0.3 seconds and stays steerable', () => {
+  const state = racing('normal', 3, { humanPlayers: 4 });
+  const baby = state.babies[0];
+  baby.x = 0; baby.z = 12;
+  moveRattle(state, 0, 4);
+  assert.equal(triggerEvent(state, 'S18'), true);
+  assert.equal(baby.awakeningPhase, 'run');
+  assert.equal(baby.stateTime, 3.8);
+  updateRace(state, 0.1);
+  const slowStart = baby.z;
+  updateRace(state, 0.1);
+  const slow = slowStart - baby.z;
+  updateRace(state, 0.15);
+  const fastStart = baby.z;
+  updateRace(state, 0.1);
+  const fast = fastStart - baby.z;
+  assert.ok(slow > BASE_SPEED * 1.25 * 0.1 * 0.93);
+  assert.ok(fast > slow * 1.55);
+  assert.ok(fast < slow * 1.95);
+  assert.ok(Math.abs(baby.x) > 0.015);
+  moveRattle(state, 3, baby.z - 4);
+  ringRattle(state);
+  updateRace(state, 0.5);
+  assert.ok(baby.heading > 0.2);
+  updateRace(state, 2.9);
+  assert.equal(baby.eventId, null);
+  assert.equal(baby.awakeningPhase, undefined);
+  assert.notEqual(baby.state, 'awakening');
+  assert.equal(triggerEvent(racing('skill'), 'S18'), false);
+});
+
+test('the five new identities also work for CPUs without obstructing a finish', () => {
+  for (const [index, id] of (['S14', 'S15', 'S16', 'S17', 'S18'] as const).entries()) {
+    const state = racing('normal', 90 + index);
+    assert.equal(triggerEvent(state, id, 1), true);
+    assert.equal(state.babies[1].isCpu, true);
+    updateRace(state, TIME_LIMIT);
+    assert.equal(state.finishReason, 'goal');
+    assert.ok(state.winner !== null && state.babies[state.winner].isCpu);
+    assert.ok(state.time < TIME_LIMIT);
+    for (const baby of state.babies) {
+      assert.ok(Math.abs(baby.x) <= COURSE_HALF_WIDTH);
+      assert.ok(Number.isFinite(baby.heading));
+    }
   }
 });

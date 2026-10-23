@@ -43,13 +43,16 @@ const LANES = [-3.9, -1.3, 1.3, 3.9];
 const NORMAL_EVENTS = EVENTS.filter(e => e.rarity === 'normal').map(e => e.id);
 const RARE_EVENTS = EVENTS.filter(e => e.rarity === 'rare').map(e => e.id);
 const LEGENDARY_EVENTS = EVENTS.filter(e => e.rarity === 'legendary').map(e => e.id);
-const NEGATIVE = new Set<EventId>(['N01','N02','N03','N04','N05','N06','N07','N08','R03','R05','R06','R07','R09','R10','S05','S08','S09','S10','S12','S13']);
+const NEGATIVE = new Set<EventId>(['N01','N02','N03','N04','N05','N06','N07','N08','R03','R05','R06','R07','R09','R10','S05','S08','S09','S10','S12','S13','S14','S16','S17']);
 // Shared phase rules for awakenings with a stationary act before their dash.
 const POSED_RUNS: Partial<Record<EventId, { pose: number; run: number; speed: number; turn: number }>> = {
   S09: { pose: 3, run: 2, speed: 1.8, turn: 2.4 },
   S10: { pose: 1.6, run: 2, speed: 1.5, turn: 1.8 },
   S12: { pose: 1.4, run: 2.4, speed: 2, turn: 2.2 },
   S13: { pose: 1.6, run: 2.2, speed: 1.7, turn: 1.4 },
+  S14: { pose: 1.4, run: 2.4, speed: 1.7, turn: 1.8 },
+  S16: { pose: 1.6, run: 2.4, speed: 1.65, turn: 2 },
+  S17: { pose: 1.4, run: 2.2, speed: 1.9, turn: 2.2 },
 };
 interface Runtime {
   rng: number; accumulator: number; clock: number; notificationId: number;
@@ -277,13 +280,15 @@ export function triggerEvent(state: RaceState, eventId: EventId, babyId = 0): bo
     case 'S06': effect('awakening', 3.1); break;
     case 'S07': effect('awakening', 2.6); break;
     case 'S08': effect('rest', 1); baby.heading = Math.PI; break;
-    case 'S09': case 'S10': case 'S12': case 'S13': {
+    case 'S09': case 'S10': case 'S12': case 'S13': case 'S14': case 'S16': case 'S17': {
       const act = POSED_RUNS[eventId]!;
       effect('awakening', act.pose + act.run);
       if (eventId === 'S09') baby.mood = 1;
       break;
     }
     case 'S11': effect('awakening', 3.6); break;
+    case 'S15': effect('awakening', 3.6); break;
+    case 'S18': effect('awakening', 3.8); break;
   }
   if (definition.rarity !== 'normal') { baby.attention = Math.max(0.8, baby.attention); rt.lastRing[babyId] = rt.clock; }
   const text = eventId === 'S01' ? '突然立ったーー！！' : definition.name + (definition.name.endsWith('！') ? '' : '！');
@@ -454,8 +459,10 @@ function updateBaby(state: RaceState, baby: Baby, dt: number, lastPlaceId: numbe
     case 'S05': multiplier = 1.7; desired = Math.PI; turnRate = 9; break;
     case 'S06': multiplier = 1.7; turnRate = 3.6; break;
     case 'S07': multiplier = 1.6; desired = Math.atan2(dx * 2.5, -dz); turnRate = 8.5; break;
-    case 'S09': case 'S10': case 'S12': case 'S13': multiplier = posedRun!.speed; turnRate = posedRun!.turn; break;
+    case 'S09': case 'S10': case 'S12': case 'S13': case 'S14': case 'S16': case 'S17': multiplier = posedRun!.speed; turnRate = posedRun!.turn; break;
     case 'S11': multiplier = 1.9; desired += Math.sin(rt.effectElapsed[id] * 7) * 0.18; turnRate = 3.2; break;
+    case 'S15': multiplier = 1.8; desired += Math.sin(rt.effectElapsed[id] * 2.6) * 0.3; turnRate = 2.8; break;
+    case 'S18': multiplier = Math.floor((rt.effectElapsed[id] + 1e-8) / 0.3) % 2 === 0 ? 1.25 : 2.2; desired += Math.sin(rt.effectElapsed[id] * 9) * 0.24; turnRate = 4; break;
     default: if (baby.state === 'groove') multiplier = 1.24;
   }
   baby.heading = turnTowards(baby.heading, desired, dt * turnRate);

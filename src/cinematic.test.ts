@@ -102,7 +102,7 @@ test('replay clears an unfinished shot and accepts new notification ids', () => 
 });
 
 test('extended stories have time for their full sequence and still skip smoothly', () => {
-  for (const [id, duration] of [['R09',4.2],['R10',3.6],['S09',4.6],['S10',4],['S11',4.2],['S12',4.4],['S13',4.2]] as const) {
+  for (const [id, duration] of [['R09',4.2],['R10',3.6],['S09',4.6],['S10',4],['S11',4.2],['S12',4.4],['S13',4.2],['S14',4.2],['S15',3.8],['S16',4.2],['S17',4.2],['S18',4]] as const) {
     const director = new CinematicDirector();
     director.observe([event(1,id)],true);
     assert.equal(director.frame?.duration,duration);

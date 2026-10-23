@@ -24,7 +24,7 @@ app.innerHTML = `
   <div id="controls-hint" class="controls-hint"></div><button id="mobile-ring" class="mobile-ring" aria-label="ガラガラを鳴らす">${rattleIcon}<span>鳴らす！</span></button>
   <section id="menu" class="menu-overlay" aria-label="タイトルメニュー"><div class="menu-content"><div class="eyebrow">BABY'S FIRST GRAND PRIX</div><h1><span class="title-top">ガラガラ！<i>✦</i></span><span class="title-bottom">ハイハイレース</span></h1><div class="title-decoration"><span></span><i>●</i><i>●</i><i>●</i></div><p class="intro-copy">お願い！ そっちじゃないって！！<br><span>4体の気まぐれベビーが繰り広げる60秒。</span></p>
   <div class="mode-selector" role="group" aria-label="レースのモード"><button class="mode-option" data-mode="normal"><span class="mode-icon">☀</span><span class="mode-name" id="normal-mode-name">ひとりでレース</span><span class="mode-description">まずはここから</span></button><button class="mode-option" data-mode="chaos"><span class="mode-icon">✦</span><span class="mode-name">ハプニング大盛り</span><span class="mode-description">まさかの連続！</span></button><button class="mode-option" data-mode="skill"><span class="mode-icon">⚑</span><span class="mode-name">ガチハイハイ</span><span class="mode-description">誘導の腕だめし</span></button></div>
-  <button id="setup-button" class="setup-summary"><span id="setup-summary"></span><b>準備する ↗</b></button><button id="start-button" class="primary-button">レースをはじめる <span class="arrow">↗</span></button><p class="menu-note" id="menu-note"></p><div class="menu-links"><button id="catalog-button">ハプニングずかん <span id="catalog-count">0 / ${EVENTS.length}</span></button><span id="record-summary"></span></div></div><div class="menu-scene-tag"><span class="tiny-star">✦</span><span>READY, BABY?<small>速いだけじゃ、勝てない。</small></span></div><footer class="menu-footer"><span class="version">BABY RACE <b>ver. 2.4</b></span><span class="engine-tag">ちいさなレース、おおきなハプニング。</span></footer></section>
+  <button id="setup-button" class="setup-summary"><span id="setup-summary"></span><b>準備する ↗</b></button><button id="start-button" class="primary-button">レースをはじめる <span class="arrow">↗</span></button><p class="menu-note" id="menu-note"></p><div class="menu-links"><button id="catalog-button">ハプニングずかん <span id="catalog-count">0 / ${EVENTS.length}</span></button><span id="record-summary"></span></div></div><div class="menu-scene-tag"><span class="tiny-star">✦</span><span>READY, BABY?<small>速いだけじゃ、勝てない。</small></span></div><footer class="menu-footer"><span class="version">BABY RACE <b>ver. 2.5</b></span><span class="engine-tag">ちいさなレース、おおきなハプニング。</span></footer></section>
   <section id="setup" class="dialog-overlay" hidden aria-label="レースの準備"><div class="dialog-card setup-card"><div class="dialog-heading"><div><span class="eyebrow">GET READY</span><h2>みんなのレースをつくろう。</h2></div><button id="setup-close-x" class="icon-button" aria-label="準備を閉じる">×</button></div>
   <div class="setup-section"><label for="human-players">あそぶ人数</label><select id="human-players"><option value="1">ひとり ＋ CPU 3体</option><option value="2">ふたり ＋ CPU 2体</option><option value="3">3人 ＋ CPU 1体</option><option value="4">4人で対戦</option></select><p class="setup-note">同じ端末で対戦。キーボード・最大4台のゲームパッドに対応。</p></div>
   <div class="setup-section"><h3>コースをえらぶ</h3><div class="course-options">${COURSES.map((course,i)=>`<button class="course-option" data-course="${course.id}" style="--course-color:#${course.palette[0].toString(16)}"><span>COURSE 0${i+1}</span><strong>${course.name}</strong><small>${course.description}</small></button>`).join('')}</div></div>
@@ -253,7 +253,7 @@ function syncCinematic(shot: CinematicFrame|null) {
     el('cinematic-player').textContent=`${playerLabel(shot.babyId)} · ${baby.name}`;
     el('cinematic-title').textContent=definition.name;
     el('cinematic-description').textContent=definition.description;
-    const badges: Partial<Record<EventId,string>>={R09:'緊急おむつピットイン！',R10:'ギャン泣き、連鎖中！',S09:'GAL MODE ON ☆',S10:'生後0年の大黒柱',S11:'目指せ、ハイハイ金メダル！',S12:'変身！おむつの平和を守れ！',S13:'ただいま、土俵入り。'};
+    const badges: Partial<Record<EventId,string>>={R09:'緊急おむつピットイン！',R10:'ギャン泣き、連鎖中！',S09:'GAL MODE ON ☆',S10:'生後0年の大黒柱',S11:'目指せ、ハイハイ金メダル！',S12:'変身！おむつの平和を守れ！',S13:'ただいま、土俵入り。',S14:'ミルク内閣、発足！',S15:'文明より、ハイハイ。',S16:'あめちゃん、いる？',S17:'今夜の指名は、ガラガラ様。',S18:'キラキラ、全部ちょうだい！'};
     el('cinematic-rarity').textContent=badges[shot.eventId]??(definition.rarity==='legendary'?'BABY AWAKENING!':'RARE HAPPENING!');
     el('cinematic').classList.toggle('legendary',definition.rarity==='legendary');
     audio.event(shot.eventId,playerLabel(shot.babyId));
@@ -266,7 +266,12 @@ function syncCinematic(shot: CinematicFrame|null) {
     :shot.eventId==='S10'?(t<.9?'そのガラガラ、わしは認めん！':t<2.9?'腕組み。ひげ。腹巻き。人生0年の貫禄。':'……ミルクの時間？なら急ぐぞい！')
     :shot.eventId==='S11'?(t<.9?'ハイハイ部門、ただいま演技開始。':t<3.3?'側転！側転！進路も採点対象です！':'着地までがハイハイ。目指せ満点！')
     :shot.eventId==='S12'?(t<.9?'おむつの平和が、いま危ない！':t<3.4?'変身！ガラガラ戦隊・ベビーレンジャー！':'必殺！ミルクの時間に間に合えダッシュ！')
-    :shot.eventId==='S13'?(t<.9?'東〜、もちもち山〜。':t<3.2?'はっけよい……レース中です！':'のこった！のこった！ゴールまで、のこった！'):null;
+    :shot.eventId==='S13'?(t<.9?'東〜、もちもち山〜。':t<3.2?'はっけよい……レース中です！':'のこった！のこった！ゴールまで、のこった！')
+    :shot.eventId==='S14'?(t<.8?'ただいま、ミルク内閣が発足しました！':t<3.2?'公約は、お昼寝延長とミルク飲み放題です！':'では、ゴールへ向けて審議を加速します！')
+    :shot.eventId==='S15'?(t<.8?'ウホッ!? ハイハイ文明、はじまる。':t<2.8?'ガラガラ、わかる。ゴール、どこだ。':'ミルクを求めて原始ダッシュ！')
+    :shot.eventId==='S16'?(t<.8?'ちょっとあんた、あめちゃんいる？':t<3.1?'レース中やけど、おしゃべりは別腹やで！':'ほな、お先に失礼するでー！')
+    :shot.eventId==='S17'?(t<.8?'ようこそ、ベビークラブ・ガラガラへ。':t<3.2?'ご指名ありがとう。ミルク、入りまーす！':'君のガラガラまで、会いに行くよ。')
+    :shot.eventId==='S18'?(t<.8?'通知！星！また通知！なにそれ見たい！':t<3.1?'キラキラは全部チェック！レースも倍速で！':'もうひとつだけ！……ゴールも気になる！'):null;
   if(beat&&el('cinematic-description').textContent!==beat)el('cinematic-description').textContent=beat;
   el('cinematic-fill').style.width=`${shot.elapsed/shot.duration*100}%`;
 }
