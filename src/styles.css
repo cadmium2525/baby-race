@@ -463,6 +463,15 @@ body[data-phase='ready'] .menu-footer { pointer-events: none; }
 .cinematic-overlay[data-event='S09'] .cinematic-heading > span { color: #b42c75; border-color: #ea97c8; background: #fff0faee; }
 .cinematic-overlay[data-event='S09'] .cinematic-track i { background: #e868ae; }
 .cinematic-overlay[data-event='S09'] .cinematic-copy p { color: #b33d80; }
+.cinematic-overlay[data-event='S10'] { color: #815b39; box-shadow: inset 0 9px #b99064c7,inset 0 -9px #b99064c7; }
+.cinematic-overlay[data-event='S11'] { color: #397d9c; box-shadow: inset 0 9px #79bed5c7,inset 0 -9px #79bed5c7; }
+.cinematic-overlay[data-event='S12'] { color: #b54244; box-shadow: inset 0 9px #e57478c7,inset 0 -9px #e57478c7; }
+.cinematic-overlay[data-event='S13'] { color: #82532d; box-shadow: inset 0 9px #c89b65c7,inset 0 -9px #c89b65c7; }
+.cinematic-overlay:is([data-event='S10'],[data-event='S11'],[data-event='S12'],[data-event='S13']) .cinematic-heading > span { color: inherit; letter-spacing: .08em; }
+.cinematic-overlay[data-event='S10'] .cinematic-track i { background: #ae8259; }
+.cinematic-overlay[data-event='S11'] .cinematic-track i { background: #65b1ca; }
+.cinematic-overlay[data-event='S12'] .cinematic-track i { background: #d95560; }
+.cinematic-overlay[data-event='S13'] .cinematic-track i { background: #b18c4e; }
 body[data-cinematic='true'] .race-hud, body[data-cinematic='true'] .course-badge,
 body[data-cinematic='true'] .labels-overlay, body[data-cinematic='true'] .bottom-hud,
 body[data-cinematic='true'] .event-banner, body[data-cinematic='true'] .mobile-ring,
@@ -479,7 +488,11 @@ body[data-cinematic='true'] .controls-hint { visibility: hidden !important; }
   .cinematic-copy h2 { font-size: 29px; }
   .cinematic-overlay[data-event='R09'] .cinematic-copy h2,
   .cinematic-overlay[data-event='R10'] .cinematic-copy h2,
-  .cinematic-overlay[data-event='S09'] .cinematic-copy h2 { font-size: 25px; }
+  .cinematic-overlay[data-event='S09'] .cinematic-copy h2,
+  .cinematic-overlay[data-event='S10'] .cinematic-copy h2,
+  .cinematic-overlay[data-event='S11'] .cinematic-copy h2,
+  .cinematic-overlay[data-event='S12'] .cinematic-copy h2,
+  .cinematic-overlay[data-event='S13'] .cinematic-copy h2 { font-size: 25px; }
   .cinematic-copy > span { font-size: 10px; }
   .cinematic-copy p { font-size: 11px; margin-top: 7px; padding: 0 8px; }
   .cinematic-skip { bottom: calc(23px + env(safe-area-inset-bottom)); right: 20px; font-size: 10px; min-height: 36px; }

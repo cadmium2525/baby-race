@@ -258,6 +258,39 @@ export class GameAudio {
         }
         break;
       }
+      case 'S10':
+        this.notes([147,147,110],.3,.23,'triangle',.28);
+        [1,1.55,2.1].forEach(delay=>{
+          this.tone(95,.19,delay,'sine',.32,42);
+          this.shake(delay,.12,550);
+        });
+        this.notes([196,247,294,392],.12,.16,'triangle',.22,2.8);
+        break;
+      case 'S11':
+        this.notes([523,659,784,1047],.15,.15,'triangle',.22);
+        [1,1.6,2.2].forEach(delay=>{
+          this.tone(330,.26,delay,'sine',.16,1320);
+          this.tone(1320,.25,delay+.25,'sine',.14,330);
+        });
+        this.notes([784,1047,1319,1568],.09,.2,'triangle',.18,3.1);
+        this.shake(3.55,.2,1600);
+        break;
+      case 'S12':
+        this.tone(160,.55,0,'sawtooth',.06,1200);
+        this.shake(.55,.24,2400);
+        this.notes([392,523,659,784,659,784,1047],.17,.16,'square',.06,.7);
+        this.notes([262,330,392,523],.3,.24,'triangle',.18,1.9);
+        this.tone(120,.4,3.15,'sine',.27,55);
+        this.tone(523,.5,3.15,'triangle',.2,1047);
+        break;
+      case 'S13':
+        this.tone(740,.45,0,'sine',.14,988);
+        [1,1.9,2.8].forEach(delay=>{
+          this.tone(115,.24,delay,'sine',.32,45);
+          this.shake(delay+.02,.18,600);
+        });
+        this.notes([392,440,587,659,880],.09,.17,'triangle',.2,3.25);
+        break;
     }
   }
 

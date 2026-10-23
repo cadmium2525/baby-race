@@ -11,6 +11,7 @@ type Snapshot = {
   rattles: { x: number; z: number; pulse: number }[];
   events: { text: string; kind: string; eventId: string | null }[];
   cinematic: null | { babyId: number; eventId: string; elapsed: number; duration: number; amount: number; phase: 'enter' | 'hold' | 'exit' };
+  happening: { headYaw: number; visible: boolean; visibleClones: number }[];
   camera: { viewHeight: number; x: number; y: number; z: number };
 };
 type CameraSample = { time: number; paused: boolean; cinematic: boolean; eventId: string | null; camera: Snapshot['camera'] };
@@ -342,6 +343,43 @@ test('portrait legendary closeup zooms in while the race and controls stay froze
     await expect.poll(async () => (await snapshot(page)).time).toBeGreaterThan(closeup.time);
     expect(errors).toEqual([]);
   } finally { await context.close(); }
+});
+
+test('runway baby keeps its neck forward during the closeup and resumed race', async ({ page }) => {
+  test.setTimeout(70_000);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  // Natural S03 seed for the 31-event pool. Update this seed when that pool or
+  // scheduling changes; keep the real input and simulation path intact.
+  await page.addInitScript(() => { Date.now = () => 77; });
+  await openGame(page);
+  await page.locator('[data-mode="chaos"]').click();
+  await start(page);
+  await expect.poll(async () => {
+    const state = await snapshot(page);
+    if (state.cinematic && state.cinematic.eventId !== 'S03' && state.cinematic.phase !== 'exit') await page.locator('#cinematic-skip').click();
+    return state.cinematic?.eventId === 'S03' && state.cinematic.elapsed > .8;
+  }, { timeout: 35_000, intervals: [100] }).toBe(true);
+  const closeup = await snapshot(page), babyId = closeup.cinematic!.babyId;
+  expect(Math.abs(closeup.happening[babyId].headYaw)).toBeLessThanOrEqual(.25);
+  await page.screenshot({ path: 'test-results/runway-forward-desktop.png' });
+  await expect.poll(async () => (await snapshot(page)).cinematic?.elapsed ?? -1).toBeGreaterThan(1.6);
+  expect(Math.abs((await snapshot(page)).happening[babyId].headYaw)).toBeLessThanOrEqual(.25);
+  await page.locator('#cinematic-skip').click();
+  await expect.poll(async () => {
+    const state = await snapshot(page);
+    return state.cinematic === null && state.babies[babyId].eventId === 'S03' && state.time > closeup.time;
+  }, { timeout: 10_000 }).toBe(true);
+  expect(Math.abs((await snapshot(page)).happening[babyId].headYaw)).toBeLessThanOrEqual(.25);
+  await expect.poll(async () => {
+    const state = await snapshot(page);
+    if (state.cinematic && state.cinematic.phase !== 'exit') await page.locator('#cinematic-skip').click();
+    return state.cinematic === null && state.babies[babyId].eventId !== 'S03';
+  }, { timeout: 15_000, intervals: [100] }).toBe(true);
+  const restored = await snapshot(page);
+  expect(restored.babies).toHaveLength(4);
+  expect(restored.happening.every(baby => baby.visible && baby.visibleClones === 0)).toBe(true);
+  expect(errors).toEqual([]);
 });
 
 for (const height of [844, 690]) test(`portrait 390x${height} supports setup scrolling, touch and four compact mood markers`, async ({ browser }) => {

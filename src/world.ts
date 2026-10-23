@@ -176,13 +176,65 @@ function buildHappenings(root: THREE.Group, body: THREE.Group, head: THREE.Group
   box(party, 0xe1d0e8, [1.15, 3, .25], [.015, .47, .015], .005);
   const partyStars: THREE.Group[] = [];
   for (let i = 0; i < 7; i++) partyStars.push(sparkle(party, i % 2 ? 0xffd6f0 : 0xf6df8c, Math.sin(i * 2.4) * 1.22, .7 + i * .23, Math.cos(i * 2.4) * .55, .13).group);
-  return { changing, wipes, wipe, freshDiaper, cleanDiaper, poop, cleanStars, droppedPacifier, pacifierColors, tears, tearDrops, chorus, cryBuddies, makeup, partyHair, party, disco, partyStars, phase: '', cryingCount: 0 };
+  const modeColors: THREE.Mesh[] = [];
+
+  const oyajiFace = new THREE.Group(); head.add(oyajiFace); oyajiFace.visible = false;
+  for (const side of [-1, 1]) {
+    const brow = box(oyajiFace, 0x5e4a43, [side * .22, .21, -.525], [.25, .075, .04], .025); brow.rotation.z = side * .28;
+    const moustache = ball(oyajiFace, 0x756255, [side * .105, -.15, -.565], [.14, .055, .04]); moustache.rotation.z = side * -.2;
+  }
+  ball(oyajiFace, 0x756255, [0, -.34, -.45], [.075, .07, .025]);
+  const oyajiBand = new THREE.Group(); body.add(oyajiBand); oyajiBand.visible = false;
+  ball(oyajiBand, 0xd4bc94, [0, .66, .3], [.52, .4, .36]);
+  for (const z of [.1, .3, .5]) { const stripe = new THREE.Mesh(new THREE.TorusGeometry(.47, .024, 8, 26), material(color)); stripe.position.set(0, .66, z); stripe.scale.y = .77; oyajiBand.add(stripe); modeColors.push(stripe); }
+  const oyajiDust = new THREE.Group(); root.add(oyajiDust); oyajiDust.visible = false;
+  for (const side of [-1, 1]) ball(oyajiDust, 0xf4e6cc, [side * .48, .21, .7], [.3, .15, .3]);
+
+  const gymHead = new THREE.Group(); head.add(gymHead); gymHead.visible = false;
+  const headband = new THREE.Mesh(new THREE.TorusGeometry(.51, .055, 8, 28), material(color)); headband.rotation.x = Math.PI / 2; headband.position.y = .28; gymHead.add(headband); modeColors.push(headband);
+  sparkle(gymHead, 0xf3d172, 0, .28, -.57, .095);
+  const gymTrail = new THREE.Group(); root.add(gymTrail); gymTrail.visible = false;
+  for (let i = 0; i < 3; i++) { const ring = new THREE.Mesh(new THREE.TorusGeometry(.22 + i * .06, .025, 8, 22), material(i % 2 ? 0xf2d488 : 0xa4d9e3)); ring.rotation.x = Math.PI / 2; ring.position.set(Math.sin(i * 2) * .28, .18, .9 + i * .55); gymTrail.add(ring); }
+
+  const heroHead = new THREE.Group(); head.add(heroHead); heroHead.visible = false;
+  modeColors.push(ball(heroHead, color, [0, .36, .06], [.6, .28, .52]));
+  modeColors.push(ball(heroHead, color, [0, .09, -.475], [.51, .23, .135]));
+  ball(heroHead, 0x464b66, [0, .095, -.592], [.4, .12, .037]);
+  const glint = box(heroHead, 0xd6f5ff, [-.16, .14, -.626], [.15, .025, .014], .005); glint.rotation.z = .2;
+  box(heroHead, 0xffe6aa, [0, .12, -.638], [.035, .17, .018], .006);
+  sparkle(heroHead, 0xf6d584, 0, .36, -.49, .1);
+  for (const side of [-1, 1]) modeColors.push(ball(heroHead, color, [side * .55, .04, .025], [.14, .19, .16]));
+  const heroCostume = new THREE.Group(); body.add(heroCostume); heroCostume.visible = false;
+  ball(heroCostume, 0xf1d07b, [0, .65, .3], [.51, .38, .21]);
+  sparkle(heroCostume, 0xfff3c0, 0, .8, -.18, .16);
+  const cape = new THREE.Group(); cape.position.set(0, 1.1, -.05); cape.rotation.x = -.95; heroCostume.add(cape);
+  const capeShape = new THREE.Shape(); capeShape.moveTo(-.36, .3); capeShape.lineTo(.36, .3); capeShape.lineTo(.65, -.85); capeShape.lineTo(-.65, -.85); capeShape.closePath();
+  const capeCloth = new THREE.Mesh(new THREE.ShapeGeometry(capeShape), new THREE.MeshStandardMaterial({ color: 0xd96e7c, side: THREE.DoubleSide, roughness: .9 })); capeCloth.castShadow = true; cape.add(capeCloth);
+  const heroAura = new THREE.Group(); root.add(heroAura); heroAura.visible = false;
+  for (let i = 0; i < 5; i++) sparkle(heroAura, i % 2 ? 0xf7d184 : 0xeab4c1, Math.sin(i * 2.4) * 1.1, .8 + i * .24, .4 + Math.cos(i * 2.4) * .45, .16);
+
+  const sumoMawashi = new THREE.Group(); body.add(sumoMawashi); sumoMawashi.visible = false;
+  modeColors.push(ball(sumoMawashi, color, [0, .62, .32], [.54, .41, .4]));
+  const rope = new THREE.Mesh(new THREE.TorusGeometry(.45, .052, 8, 28), material(0xf1e4c2)); rope.position.set(0, .65, -.025); rope.scale.y = .74; sumoMawashi.add(rope);
+  for (const x of [-.3, 0, .3]) for (let j = 0; j < 3; j++) { const paper = box(sumoMawashi, 0xfffbeb, [x + (j % 2 ? .04 : 0), .64 - j * .09, -.135], [.12, .055, .025], .008); paper.rotation.z = j % 2 ? -.48 : .48; }
+  const sumoHair = new THREE.Group(); head.add(sumoHair); sumoHair.visible = false;
+  ball(sumoHair, 0x5a4d55, [0, .51, .035], [.19, .16, .18]); ball(sumoHair, 0x5a4d55, [0, .71, .075], [.15, .075, .1]);
+  const dohyo = new THREE.Group(); root.add(dohyo); dohyo.visible = false;
+  const sand = new THREE.Mesh(new THREE.CircleGeometry(1.46, 48), material(0xf0dfbd)); sand.rotation.x = -Math.PI / 2; sand.position.y = .165; dohyo.add(sand);
+  const edge = new THREE.Mesh(new THREE.TorusGeometry(1.46, .055, 10, 48), material(0xd4b784)); edge.rotation.x = Math.PI / 2; edge.position.y = .19; dohyo.add(edge);
+  for (const x of [-.32, .32]) box(dohyo, 0xfff5dc, [x, .178, 0], [.055, .025, .65], .008);
+  const sumoDust = new THREE.Group(); root.add(sumoDust); sumoDust.visible = false;
+  for (const side of [-1, 1]) ball(sumoDust, 0xe9d8ba, [side * .58, .22, .55], [.28, .16, .3]);
+  return { changing, wipes, wipe, freshDiaper, cleanDiaper, poop, cleanStars, droppedPacifier, pacifierColors, tears, tearDrops, chorus, cryBuddies, makeup, partyHair, party, disco, partyStars,
+    oyajiFace, oyajiBand, oyajiDust, gymHead, gymTrail, heroHead, heroCostume, cape, heroAura, sumoMawashi, sumoHair, dohyo, sumoDust, modeColors,
+    gymGroundClearance: null as number | null, phase: '', cryingCount: 0 };
 }
 interface DoublePart { source: THREE.Object3D; copy: THREE.Object3D }
 /** Clone only the ordinary baby graph. Geometry and texture ownership remains
  * with the original; only the translucent materials belong to these doubles. */
 function buildDoubles(body: THREE.Group, head: THREE.Group, happenings: ReturnType<typeof buildHappenings>, root = new THREE.Group()) {
-  const excluded = new Set<THREE.Object3D>([happenings.cleanDiaper, happenings.tears, happenings.makeup, happenings.partyHair]);
+  const excluded = new Set<THREE.Object3D>([happenings.cleanDiaper, happenings.tears, happenings.makeup, happenings.partyHair,
+    happenings.oyajiFace, happenings.oyajiBand, happenings.gymHead, happenings.heroHead, happenings.heroCostume, happenings.sumoMawashi, happenings.sumoHair]);
   const privateMaterials = new Map<THREE.Material, THREE.Material>();
   const copies: {anchor: THREE.Group; head: THREE.Object3D; parts: DoublePart[]}[] = [];
   const translucent = (source: THREE.Material) => {
@@ -207,7 +259,7 @@ function buildDoubles(body: THREE.Group, head: THREE.Group, happenings: ReturnTy
   return { root, copies, privateMaterials };
 }
 function buildBaby(style: BabyStyle, skin: number) {
-  const color = new THREE.Color(style.color).getHex(); const root = new THREE.Group(); const body = new THREE.Group(); root.add(body);
+  const color = new THREE.Color(style.color).getHex(); const root = new THREE.Group(); const acro = new THREE.Group(); const body = new THREE.Group(); root.add(acro); acro.add(body);
   const clothing: THREE.Mesh[] = [ball(body, color, [0, .66, .25], [.48, .39, .64])]; ball(body, 0xfffaf1, [0, .6, .62], [.47, .36, .34]);
   const head = new THREE.Group(); head.position.set(0, 1.01, -.39); body.add(head);
   ball(head, skin, [0, 0, 0], [.59, .58, .56]); ball(head, skin, [-.57, -.03, -.02], [.12, .17, .12]); ball(head, skin, [.57, -.03, -.02], [.12, .17, .12]);
@@ -229,8 +281,8 @@ function buildBaby(style: BabyStyle, skin: number) {
   root.add(speedLines); speedLines.visible = false;
   const happenings = buildHappenings(root, body, head, color, skin);
   const doubles = buildDoubles(body, head, happenings); const ghosts = doubles.root; root.add(ghosts);
-  const presentation = { baby: null as Baby | null, eventId: null as EventId | null, lastStateTime: 0, showcased: false, animationOffset: 0, cutElapsed: 0, inCut: false };
-  return { root, body, head, limbs, speedLines, clothing, accessory, eyes, eyeHighlights, eyebrows, mouth, pacifier, ghosts, doubles, happenings, presentation, accessoryKind: style.accessory, styleKey: `${style.color}/${style.accessory}` };
+  const presentation = { baby: null as Baby | null, eventId: null as EventId | null, lastStateTime: 0, showcased: false, animationOffset: 0, cutElapsed: 0, inCut: false, startedAt: 0, visualElapsed: 0 };
+  return { root, acro, body, head, limbs, speedLines, clothing, accessory, eyes, eyeHighlights, eyebrows, mouth, pacifier, ghosts, doubles, happenings, presentation, accessoryKind: style.accessory, styleKey: `${style.color}/${style.accessory}` };
 }
 function buildRattle(color: number) {
   const root = new THREE.Group(); const toy = new THREE.Group(); root.add(toy); const colored: THREE.Mesh[] = [];
@@ -343,7 +395,8 @@ export class GameWorld {
   moodPoint(index: number) {
     const rig = this.babies[index], out = this.moodScreens[index];
     if (!rig || !out) return { x: 0, y: 0, visible: false };
-    const height = rig.happenings.partyHair.visible ? 1.0 : rig.accessoryKind === 'bunny' ? 1.5 : rig.accessoryKind === 'crown' ? 1.15 : .82;
+    const h = rig.happenings;
+    const height = h.partyHair.visible ? 1.0 : h.sumoHair.visible ? .95 : h.heroHead.visible || h.gymHead.visible || h.oyajiFace.visible ? .85 : rig.accessoryKind === 'bunny' ? 1.5 : rig.accessoryKind === 'crown' ? 1.15 : .82;
     rig.head.updateWorldMatrix(true, false);
     this.moodScratch.set(0, height, 0); rig.head.localToWorld(this.moodScratch); this.moodScratch.project(this.camera);
     out.x = (this.moodScratch.x + 1) / 2 * this.width; out.y = (1 - this.moodScratch.y) / 2 * this.height;
@@ -363,6 +416,7 @@ export class GameWorld {
     rig.doubles = buildDoubles(rig.body, rig.head, rig.happenings, rig.ghosts);
     const rattle = this.rattles[index]; rattle.colored.forEach(mesh => { mesh.material = material(color); }); rattle.wave.material.color.setHex(color); rattle.range.material.color.setHex(color);
     rig.happenings.pacifierColors.forEach(mesh => { mesh.material = material(color); });
+    rig.happenings.modeColors.forEach(mesh => { mesh.material = material(color); });
     this.materialsNeedWarmup = true;
   }
   private updateCamera(state: RaceState, dt: number, cinematic?: CinematicFrame | null) {
@@ -382,14 +436,18 @@ export class GameWorld {
       this.cutElapsed = cinematic.elapsed;
       const amount = THREE.MathUtils.clamp(cinematic.amount, 0, 1);
       let faceAngle = -baby.heading;
-      // These two poses deliberately look over a shoulder; S08 faces the
+      // Reverse running deliberately looks over a shoulder; S08 faces the
       // audience. Only the camera changes, never the baby's simulation pose.
-      if (cinematic.eventId === 'S03' || cinematic.eventId === 'S05') faceAngle += Math.PI * .8;
+      if (cinematic.eventId === 'S05') faceAngle += Math.PI * .8;
       else if (cinematic.eventId === 'S08') faceAngle = -2.87;
       else if (cinematic.eventId === 'R09') faceAngle -= .38;
       const frontX = -Math.sin(faceAngle), frontZ = -Math.cos(faceAngle);
       const partyWide = cinematic.eventId === 'S09' ? THREE.MathUtils.smoothstep(cinematic.elapsed, 1.2, 1.8) : 0;
-      const closeY = cinematic.eventId === 'R02' ? .9 : cinematic.eventId === 'S09' ? THREE.MathUtils.lerp(1.65, 1.5, partyWide) : cinematic.eventId === 'R10' ? 1.35 : 1.15;
+      const newForm = cinematic.eventId === 'S10' || cinematic.eventId === 'S11' || cinematic.eventId === 'S12' || cinematic.eventId === 'S13';
+      const formWide = newForm ? THREE.MathUtils.smoothstep(cinematic.elapsed, .75, 1.4) : 0;
+      const formY = cinematic.eventId === 'S11' ? 1.85 : cinematic.eventId === 'S13' ? 1.15 : 1.35;
+      const runwayBunny = cinematic.eventId === 'S03' && baby.style.accessory === 'bunny';
+      const closeY = newForm ? THREE.MathUtils.lerp(1.6, formY, formWide) : cinematic.eventId === 'S03' ? runwayBunny ? 1.75 : 1.55 : cinematic.eventId === 'R02' ? .9 : cinematic.eventId === 'S09' ? THREE.MathUtils.lerp(1.65, 1.5, partyWide) : cinematic.eventId === 'R10' ? 1.35 : 1.15;
       this.closeTarget.set(baby.x + frontX * .15, closeY, baby.z + frontZ * .15);
       this.closeEye.set(this.closeTarget.x + frontX * 12, this.closeTarget.y + 4, this.closeTarget.z + frontZ * 12);
       this.closeMatrix.lookAt(this.closeEye, this.closeTarget, this.cameraUp); this.closeRotation.setFromRotationMatrix(this.closeMatrix);
@@ -397,7 +455,11 @@ export class GameWorld {
       this.camera.quaternion.copy(this.savedRotation).slerp(this.closeRotation, amount);
       const distance = THREE.MathUtils.lerp(this.cameraOffset.length(), Math.hypot(12, 4), amount);
       this.camera.position.set(0, 0, distance).applyQuaternion(this.camera.quaternion).add(this.target);
-      const closeHeight = cinematic.eventId === 'S06' ? Math.max(3.8, 5.6 / aspect) : cinematic.eventId === 'S09' ? Math.max(THREE.MathUtils.lerp(3.0, 4.2, partyWide), THREE.MathUtils.lerp(2.65, 3.5, partyWide) / aspect)
+      const fullHeight = cinematic.eventId === 'S11' ? 5.8 : cinematic.eventId === 'S10' ? 4.0 : 4.4;
+      const fullWidth = cinematic.eventId === 'S11' ? 4.8 : cinematic.eventId === 'S13' ? 4.1 : 3.7;
+      const closeHeight = newForm ? Math.max(THREE.MathUtils.lerp(3.1, fullHeight, formWide), THREE.MathUtils.lerp(2.75, fullWidth, formWide) / aspect)
+        : cinematic.eventId === 'S03' ? Math.max(runwayBunny ? 4.8 : 4.3, (runwayBunny ? 3.3 : 3.05) / aspect)
+        : cinematic.eventId === 'S06' ? Math.max(3.8, 5.6 / aspect) : cinematic.eventId === 'S09' ? Math.max(THREE.MathUtils.lerp(3.0, 4.2, partyWide), THREE.MathUtils.lerp(2.65, 3.5, partyWide) / aspect)
         : cinematic.eventId === 'R10' ? Math.max(4.05, 3.35 / aspect) : cinematic.eventId === 'R09' ? Math.max(3.9, 3.25 / aspect) : Math.max(3.45, 2.65 / aspect);
       this.viewHeight = Math.exp(Math.log(this.savedCamera.height) + (Math.log(closeHeight) - Math.log(this.savedCamera.height)) * amount);
     } else {
@@ -422,6 +484,7 @@ export class GameWorld {
       // occurrence. Presentation memory never changes the simulation's timer.
       if (presentation.baby !== b || presentation.eventId !== b.eventId || b.stateTime > presentation.lastStateTime + 1e-6) {
         presentation.showcased = false; presentation.animationOffset = 0; presentation.cutElapsed = 0; presentation.inCut = false;
+        presentation.startedAt = elapsed; presentation.visualElapsed = 0;
       }
       presentation.baby = b; presentation.eventId = b.eventId; presentation.lastStateTime = b.stateTime;
       if (preview && preview.eventId === b.eventId) {
@@ -435,6 +498,7 @@ export class GameWorld {
       // they must return still crying, without dropping them a second time.
       if (cinematic?.eventId === 'R10' && b.eventId === 'R10') presentation.showcased = true;
       const visualTime = elapsed + presentation.animationOffset + (preview?.elapsed ?? 0);
+      presentation.visualElapsed = Math.max(0, visualTime - presentation.startedAt);
       rig.root.position.set(intro ? (i % 2 ? 3 : 0) : b.x, .04, intro ? 13 - Math.floor(i / 2) * 4 - i % 2 : b.z); rig.root.rotation.set(0, intro ? -2.65 + Math.sin(elapsed * .5 + i) * .08 : -b.heading, 0); this.animateBaby(rig, b, visualTime, intro, preview);
       const r = this.rattles[i]; const rattle = state.rattles[i]; r.root.visible = !intro && state.phase !== 'finished' && !cinematic; r.root.position.set(rattle.x, .85 + Math.sin(elapsed * 3 + i) * .06, rattle.z);
       r.toy.rotation.z = rattle.pulse > 0 && !this.reducedMotion ? Math.sin(elapsed * 60) * .3 : -.2; const pulse = Math.max(0, rattle.pulse); r.wave.visible = pulse > 0;
@@ -467,14 +531,21 @@ export class GameWorld {
   }
   private animateBaby(rig: ReturnType<typeof buildBaby>, b: Baby, time: number, intro: boolean, preview?: CinematicFrame) {
     const event = intro ? null : preview?.eventId ?? b.eventId; const t = time * (b.state === 'groove' ? 14 : 8) + b.id * 2; const moving = intro || ['happy', 'groove', 'distracted', 'awakening'].includes(b.state); const motion = this.reducedMotion ? .35 : 1;
+    rig.acro.position.set(0, 0, 0); rig.acro.rotation.set(0, 0, 0);
     rig.body.rotation.set(0, 0, 0); rig.body.position.set(0, moving ? Math.sin(t * 2) * .028 * motion : 0, 0); rig.head.rotation.set(b.state === 'rest' ? .12 : 0, b.state === 'look' ? Math.sin(time * 3) * .45 : Math.sin(time * 1.5) * .04, 0);
     rig.speedLines.visible = false; rig.ghosts.visible = event === 'S06';
     const h = rig.happenings;
     h.changing.visible = h.poop.visible = h.cleanStars.visible = h.cleanDiaper.visible = false;
     h.droppedPacifier.visible = h.tears.visible = false;
     h.makeup.visible = h.partyHair.visible = h.party.visible = event === 'S09';
+    h.oyajiFace.visible = h.oyajiBand.visible = event === 'S10'; h.oyajiDust.visible = false;
+    h.gymHead.visible = event === 'S11'; h.gymTrail.visible = false; h.gymGroundClearance = null;
+    h.heroHead.visible = h.heroCostume.visible = h.heroAura.visible = event === 'S12';
+    h.sumoMawashi.visible = h.sumoHair.visible = event === 'S13'; h.dohyo.visible = h.sumoDust.visible = false;
+    h.cape.rotation.set(-.95, 0, 0);
     h.phase = '';
-    rig.accessory.visible = event !== 'S09'; rig.pacifier.visible = event !== 'S09' && event !== 'R10';
+    const newForm = event === 'S10' || event === 'S11' || event === 'S12' || event === 'S13';
+    rig.accessory.visible = event !== 'S09' && !newForm; rig.pacifier.visible = event !== 'S09' && event !== 'R10' && !newForm;
     rig.mouth.visible = event !== 'S09'; rig.mouth.material = material(0xf2a9a5);
     for (const highlight of rig.eyeHighlights) highlight.visible = event !== 'R10';
     rig.eyes.forEach(eye => { eye.scale.y = .066; }); rig.eyebrows.forEach(brow => { brow.visible = false; }); rig.mouth.scale.set(.14, .09, .04); rig.mouth.rotation.z = 0;
@@ -542,7 +613,7 @@ export class GameWorld {
         stand(rise); if (phase === 'pose') { rig.limbs[0].rotation.set(-.6, 0, -1.5); rig.limbs[2].rotation.set(.5, 0, -.7); } else { fast(23); rig.speedLines.visible = phase === 'run'; } break;
       }
       case 'S02': stand(.78); rig.head.rotation.y = Math.round(Math.sin(time * 2) * 1.5) * .3; rig.limbs.forEach((limb, j) => { limb.rotation.x = Math.sign(Math.sin(time * 9 + j * Math.PI)) * .45 * motion; limb.rotation.z = j % 2 ? 0 : (j ? -.5 : .5); }); break;
-      case 'S03': stand(); rig.body.rotation.z = Math.sin(time * 4) * .16 * motion; rig.head.rotation.z = -.17; rig.head.rotation.y = Math.PI * .8; rig.limbs[0].rotation.z = .8; rig.limbs[2].rotation.z = -.8; rig.limbs[1].rotation.x = Math.sin(time * 7) * .45; rig.limbs[3].rotation.x = -Math.sin(time * 7) * .45; break;
+      case 'S03': stand(); h.phase = 'runway'; rig.body.rotation.z = Math.sin(time * 4) * .12 * motion; rig.body.rotation.y = Math.sin(time * 4) * .06 * motion; rig.head.rotation.z = -.13; rig.head.rotation.y = .12 + Math.sin(time * 2) * .06 * motion; rig.limbs[0].rotation.z = .8; rig.limbs[2].rotation.z = -.8; rig.limbs[1].rotation.x = Math.sin(time * 7) * .45; rig.limbs[3].rotation.x = -Math.sin(time * 7) * .45; break;
       case 'S04': rig.body.position.y = -.18; rig.body.rotation.z = Math.sin(time * 10) * .18 * motion; rig.limbs[0].rotation.x = .9; rig.limbs[2].rotation.x = .9; rig.limbs[1].rotation.x = Math.sin(time * 25) * .55; rig.limbs[3].rotation.x = -Math.sin(time * 25) * .55; rig.speedLines.visible = true; break;
       case 'S05': rig.head.rotation.y = Math.PI * .8; rig.body.rotation.z = Math.sin(time * 7) * .08; fast(19, .4); rig.speedLines.visible = true; rig.speedLines.rotation.y = Math.PI; break;
       case 'S06': fast(18, .4); rig.body.rotation.z = Math.sin(time * 12) * .08 * motion; break;
@@ -565,6 +636,69 @@ export class GameWorld {
         }
         break;
       }
+      case 'S10': {
+        const running = !preview && b.awakeningPhase === 'run', clock = rig.presentation.visualElapsed;
+        stand(.95); h.phase = running ? 'oyaji-stomp' : 'oyaji-pose';
+        rig.head.rotation.y = Math.sin(clock * 2) * .06; rig.head.rotation.x -= .05;
+        rig.mouth.scale.set(.1, .035, .035);
+        rig.limbs[0].rotation.set(.9, -.2, 1.25); rig.limbs[2].rotation.set(.9, .2, -1.25);
+        if (running) {
+          const stomp = Math.sin(clock * 10);
+          rig.limbs[1].rotation.x = stomp * .5; rig.limbs[3].rotation.x = -stomp * .5;
+          rig.body.position.y += Math.abs(stomp) * .08 * motion;
+          h.oyajiDust.visible = true; h.oyajiDust.scale.setScalar(.6 + Math.abs(stomp) * .5); rig.speedLines.visible = true;
+        } else { rig.limbs[1].rotation.x = -.1; rig.limbs[3].rotation.x = .1; }
+        break;
+      }
+      case 'S11': {
+        const clock = rig.presentation.visualElapsed;
+        const ready = !!preview && preview.elapsed < 1.5;
+        stand(.95); rig.head.rotation.y = 0; rig.limbs[0].rotation.set(.1, 0, -1.4); rig.limbs[2].rotation.set(.1, 0, 1.4);
+        rig.limbs[1].rotation.x = Math.sin(clock * 7) * .2; rig.limbs[3].rotation.x = -Math.sin(clock * 7) * .2;
+        h.phase = ready ? 'gymnast-ready' : 'gymnast-cartwheel';
+        const age = Math.max(0, clock - (rig.presentation.showcased ? 1.5 : 0));
+        const angle = ready ? 0 : this.reducedMotion ? Math.sin(age * 3) * .38 : age * 5.2;
+        const cosine = Math.cos(angle), center = 1.15;
+        // The same upright bounds and pivot apply during preparation and at
+        // the first turning frame. This keeps feet above the mat without a
+        // height jump when the cartwheel starts; the base foot minimum is ~0.
+        const minimum = -Math.abs(Math.sin(angle)) * 1.25 + cosine * (cosine >= 0 ? -.02 - center : 2.45 - center);
+        const lift = Math.max(center, .12 - minimum);
+        rig.body.position.y -= center; rig.acro.position.y = lift; rig.acro.rotation.z = angle;
+        h.gymGroundClearance = (lift + minimum) * rig.root.scale.y + rig.root.position.y - .15;
+        if (!ready) {
+          h.gymTrail.visible = true; h.gymTrail.rotation.y = Math.sin(clock * 2) * .15; rig.speedLines.visible = true;
+        }
+        break;
+      }
+      case 'S12': {
+        const running = !preview && b.awakeningPhase === 'run', clock = rig.presentation.visualElapsed;
+        stand(.98); h.phase = running ? 'hero-dash' : 'hero-pose';
+        rig.head.rotation.y = .1; rig.head.rotation.z = -.06;
+        h.cape.rotation.set(-.93, Math.sin(clock * (running ? 18 : 4)) * (running ? .32 : .08) * motion, Math.sin(clock * 5) * .08);
+        h.heroAura.rotation.y = clock * .35;
+        if (running) { fast(23, .65); rig.speedLines.visible = true; }
+        else { rig.limbs[0].rotation.set(.5, 0, -1.8); rig.limbs[2].rotation.set(.9, 0, .65); rig.limbs[1].rotation.x = -.3; rig.limbs[3].rotation.x = .25; }
+        break;
+      }
+      case 'S13': {
+        const running = !preview && b.awakeningPhase === 'run', clock = rig.presentation.visualElapsed;
+        stand(.9); h.phase = running ? 'sumo-charge' : 'sumo-shiko';
+        rig.head.rotation.x -= .07; rig.head.rotation.y = 0; h.sumoDust.visible = true;
+        if (running) {
+          const shuffle = Math.sin(clock * 15);
+          rig.limbs[0].rotation.set(.9, 0, -.35); rig.limbs[2].rotation.set(.9, 0, .35);
+          rig.limbs[1].rotation.x = shuffle * .25; rig.limbs[3].rotation.x = -shuffle * .25;
+          rig.body.position.y += Math.abs(shuffle) * .035 * motion; h.sumoDust.scale.setScalar(.65 + Math.abs(shuffle) * .35); rig.speedLines.visible = true;
+        } else {
+          const shiko = Math.sin(clock * 4.5), left = Math.max(0, shiko), right = Math.max(0, -shiko);
+          h.dohyo.visible = true; rig.body.position.x = shiko * .12 * motion;
+          rig.limbs[0].rotation.set(.2, 0, -.9); rig.limbs[2].rotation.set(.2, 0, .9);
+          rig.limbs[1].rotation.set(-.45 - left * .65, 0, -left * .8); rig.limbs[3].rotation.set(-.45 - right * .65, 0, right * .8);
+          rig.body.position.y += Math.abs(shiko) * .07 * motion; h.sumoDust.scale.setScalar(.5 + (1 - Math.abs(shiko)) * .55);
+        }
+        break;
+      }
     }
     if (event !== 'S05') rig.speedLines.rotation.y = 0;
     if (!event && b.state === 'awakening') { stand(); fast(23); rig.speedLines.visible = b.awakeningPhase === 'run'; }
@@ -576,6 +710,7 @@ export class GameWorld {
   getHappeningDiagnostics() {
     return this.babies.map((rig, babyId) => ({
       babyId, visible: rig.root.visible, phase: rig.happenings.phase,
+      headYaw: rig.head.rotation.y, bodyYaw: rig.body.rotation.y, bodyRootYaw: rig.root.rotation.y, bodyRoll: rig.acro.rotation.z,
       showcased: rig.presentation.showcased,
       cloneCount: rig.doubles.copies.length,
       visibleClones: rig.root.visible && rig.ghosts.visible ? rig.doubles.copies.length : 0,
@@ -593,6 +728,10 @@ export class GameWorld {
       diaperStage: rig.happenings.phase === 'surprise' || rig.happenings.changing.visible ? rig.happenings.phase : null,
       changingMat: rig.happenings.changing.visible, cleanDiaper: rig.happenings.cleanDiaper.visible,
       discoBall: rig.happenings.party.visible,
+      oyajiFace: rig.happenings.oyajiFace.visible, oyajiBand: rig.happenings.oyajiBand.visible,
+      gymHeadband: rig.happenings.gymHead.visible, gymTrail: rig.happenings.gymTrail.visible, gymGroundClearance: rig.happenings.gymGroundClearance,
+      heroVisor: rig.happenings.heroHead.visible, heroCape: rig.happenings.heroCostume.visible,
+      sumoMawashi: rig.happenings.sumoMawashi.visible, sumoHair: rig.happenings.sumoHair.visible, dohyo: rig.happenings.dohyo.visible,
     }));
   }
   dispose() {

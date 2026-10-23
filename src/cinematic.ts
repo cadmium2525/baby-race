@@ -10,7 +10,7 @@ export interface CinematicFrame {
   readonly phase: 'enter' | 'hold' | 'exit';
 }
 export const CINEMATIC_TIMING = { enter: 0.45, exit: 0.55, rare: 2.6, legendary: 3.2 } as const;
-const EVENT_DURATION: Partial<Record<EventId, number>> = { R09: 4.2, R10: 3.6, S09: 4.6 };
+const EVENT_DURATION: Partial<Record<EventId, number>> = { R09: 4.2, R10: 3.6, S09: 4.6, S10: 4, S11: 4.2, S12: 4.4, S13: 4.2 };
 interface Shot { babyId: number; eventId: EventId; elapsed: number; duration: number }
 const smooth = (t: number) => { const x = Math.max(0, Math.min(1, t)); return x * x * (3 - 2 * x); };
 

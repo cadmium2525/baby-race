@@ -43,7 +43,14 @@ const LANES = [-3.9, -1.3, 1.3, 3.9];
 const NORMAL_EVENTS = EVENTS.filter(e => e.rarity === 'normal').map(e => e.id);
 const RARE_EVENTS = EVENTS.filter(e => e.rarity === 'rare').map(e => e.id);
 const LEGENDARY_EVENTS = EVENTS.filter(e => e.rarity === 'legendary').map(e => e.id);
-const NEGATIVE = new Set<EventId>(['N01','N02','N03','N04','N05','N06','N07','N08','R03','R05','R06','R07','R09','R10','S05','S08','S09']);
+const NEGATIVE = new Set<EventId>(['N01','N02','N03','N04','N05','N06','N07','N08','R03','R05','R06','R07','R09','R10','S05','S08','S09','S10','S12','S13']);
+// Shared phase rules for awakenings with a stationary act before their dash.
+const POSED_RUNS: Partial<Record<EventId, { pose: number; run: number; speed: number; turn: number }>> = {
+  S09: { pose: 3, run: 2, speed: 1.8, turn: 2.4 },
+  S10: { pose: 1.6, run: 2, speed: 1.5, turn: 1.8 },
+  S12: { pose: 1.4, run: 2.4, speed: 2, turn: 2.2 },
+  S13: { pose: 1.6, run: 2.2, speed: 1.7, turn: 1.4 },
+};
 interface Runtime {
   rng: number; accumulator: number; clock: number; notificationId: number;
   lastRing: number[]; lastAcceptedRing: number[]; lastNegative: number[];
@@ -192,15 +199,14 @@ function nearestRival(state: RaceState, baby: Baby): Baby | undefined {
 }
 function applyEffect(state: RaceState, baby: Baby, eventId: EventId, value: BabyState, duration: number): void {
   const rt = runtime(state);
-  // The dance has two seconds of movement after its stop; shorten only the
-  // stationary part near the goal, preserving the promised dash.
-  const finishLimit = eventId === 'S09' ? 2 + 0.65 : 0.65;
+  // Shorten only the stationary act near the goal, preserving its promised dash.
+  const finishLimit = (POSED_RUNS[eventId]?.run ?? 0) + 0.65;
   const seconds = NEGATIVE.has(eventId) && baby.z < GOAL_Z + 4 ? Math.min(duration, finishLimit) : duration;
   setState(baby, value, seconds); baby.eventId = eventId;
   rt.effectElapsed[baby.id] = 0; rt.targetBaby[baby.id] = null; rt.eventReady[baby.id] = state.time + seconds + 1.5;
   if (NEGATIVE.has(eventId)) rt.lastNegative[baby.id] = state.time;
   if (eventId.startsWith('S')) {
-    baby.awakeningPhase = eventId === 'S01' || eventId === 'S09' ? 'pose' : 'run';
+    baby.awakeningPhase = eventId === 'S01' || POSED_RUNS[eventId] ? 'pose' : 'run';
     rt.specialReady[baby.id] = state.time + seconds + 14;
   }
 }
@@ -271,7 +277,13 @@ export function triggerEvent(state: RaceState, eventId: EventId, babyId = 0): bo
     case 'S06': effect('awakening', 3.1); break;
     case 'S07': effect('awakening', 2.6); break;
     case 'S08': effect('rest', 1); baby.heading = Math.PI; break;
-    case 'S09': effect('awakening', 5); baby.mood = 1; break;
+    case 'S09': case 'S10': case 'S12': case 'S13': {
+      const act = POSED_RUNS[eventId]!;
+      effect('awakening', act.pose + act.run);
+      if (eventId === 'S09') baby.mood = 1;
+      break;
+    }
+    case 'S11': effect('awakening', 3.6); break;
   }
   if (definition.rarity !== 'normal') { baby.attention = Math.max(0.8, baby.attention); rt.lastRing[babyId] = rt.clock; }
   const text = eventId === 'S01' ? '突然立ったーー！！' : definition.name + (definition.name.endsWith('！') ? '' : '！');
@@ -318,12 +330,16 @@ function updateSchedules(state: RaceState): void {
 }
 function updateOrdinarySchedules(state: RaceState): void {
   const rt = runtime(state);
-  // Keep the next free participant available between the spectacle scheduler's
-  // retries instead of immediately spending their protection window on a minor
-  // setback. All cooldowns still apply to the waiting effect itself.
-  if (state.mode === 'chaos' && (rt.rareWaiting || rt.legendaryWaiting)) return;
+  // Reserve the next participant for each waiting spectacle, while allowing the
+  // other racers' ordinary events to continue. Reserving the whole field would
+  // suppress too many events as the catalog gains more protected pose acts.
+  const reserved = new Set<number>();
+  if (state.mode === 'chaos') {
+    if (rt.legendaryWaiting) reserveNextParticipant(state, LEGENDARY_EVENTS[rt.legendaryCursor % LEGENDARY_EVENTS.length], reserved);
+    if (rt.rareWaiting) reserveNextParticipant(state, RARE_EVENTS[rt.rareCursor % RARE_EVENTS.length], reserved);
+  }
   for (const baby of state.babies) {
-    if (baby.finishedAt !== null || state.time < rt.nextNormal[baby.id]) continue;
+    if (reserved.has(baby.id) || baby.finishedAt !== null || state.time < rt.nextNormal[baby.id]) continue;
     const eventId = NORMAL_EVENTS[rt.normalCursor[baby.id] % NORMAL_EVENTS.length];
     if (triggerEvent(state, eventId, baby.id)) {
       rt.normalCursor[baby.id] += 1;
@@ -331,6 +347,16 @@ function updateOrdinarySchedules(state: RaceState): void {
       rt.nextNormal[baby.id] = state.time + interval;
     } else rt.nextNormal[baby.id] = state.time + 0.8;
   }
+}
+function reserveNextParticipant(state: RaceState, eventId: EventId, reserved: Set<number>): void {
+  const rt = runtime(state);
+  const readyAt = (baby: Baby) => Math.max(state.time, rt.eventReady[baby.id],
+    NEGATIVE.has(eventId) ? rt.lastNegative[baby.id] + 7 : 0,
+    eventId.startsWith('S') ? rt.specialReady[baby.id] : 0);
+  const next = state.babies.filter(baby => baby.finishedAt === null && !reserved.has(baby.id) &&
+    (eventId !== 'S08' || baby.z < GOAL_Z + 6))
+    .sort((a, b) => readyAt(a) - readyAt(b) || a.id - b.id)[0];
+  if (next) reserved.add(next.id);
 }
 function updateRareSchedule(state: RaceState): void {
   const rt = runtime(state);
@@ -395,7 +421,8 @@ function updateBaby(state: RaceState, baby: Baby, dt: number, lastPlaceId: numbe
   }
   const eventId = baby.eventId;
   if (eventId === 'S01') baby.awakeningPhase = baby.stateTime > AWAKE_RUN + AWAKE_LANDING ? 'pose' : baby.stateTime > AWAKE_LANDING ? 'run' : 'landing';
-  if (eventId === 'S09') baby.awakeningPhase = baby.stateTime > 2 + 1e-8 ? 'pose' : 'run';
+  const posedRun = eventId ? POSED_RUNS[eventId] : undefined;
+  if (posedRun) baby.awakeningPhase = baby.stateTime > posedRun.run + 1e-8 ? 'pose' : 'run';
   if (baby.state === 'rest' || baby.state === 'look' || (baby.state === 'awakening' && baby.awakeningPhase !== 'run')) return;
   const rattle = state.rattles[id], isAwake = baby.state === 'awakening', isSuper = state.time <= rt.superUntil[id], distracted = baby.state === 'distracted';
   const other = rt.targetBaby[id] === null ? undefined : state.babies[rt.targetBaby[id]!];
@@ -427,7 +454,8 @@ function updateBaby(state: RaceState, baby: Baby, dt: number, lastPlaceId: numbe
     case 'S05': multiplier = 1.7; desired = Math.PI; turnRate = 9; break;
     case 'S06': multiplier = 1.7; turnRate = 3.6; break;
     case 'S07': multiplier = 1.6; desired = Math.atan2(dx * 2.5, -dz); turnRate = 8.5; break;
-    case 'S09': multiplier = 1.8; turnRate = 2.4; break;
+    case 'S09': case 'S10': case 'S12': case 'S13': multiplier = posedRun!.speed; turnRate = posedRun!.turn; break;
+    case 'S11': multiplier = 1.9; desired += Math.sin(rt.effectElapsed[id] * 7) * 0.18; turnRate = 3.2; break;
     default: if (baby.state === 'groove') multiplier = 1.24;
   }
   baby.heading = turnTowards(baby.heading, desired, dt * turnRate);

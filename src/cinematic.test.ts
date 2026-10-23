@@ -101,8 +101,8 @@ test('replay clears an unfinished shot and accepts new notification ids', () => 
   assert.equal(director.frame?.elapsed,0);
 });
 
-test('diaper, crying and gyaru stories have time for their full sequence and still skip smoothly', () => {
-  for (const [id, duration] of [['R09',4.2],['R10',3.6],['S09',4.6]] as const) {
+test('extended stories have time for their full sequence and still skip smoothly', () => {
+  for (const [id, duration] of [['R09',4.2],['R10',3.6],['S09',4.6],['S10',4],['S11',4.2],['S12',4.4],['S13',4.2]] as const) {
     const director = new CinematicDirector();
     director.observe([event(1,id)],true);
     assert.equal(director.frame?.duration,duration);

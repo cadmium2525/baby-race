@@ -422,22 +422,23 @@ test('zone notifications occur on entry, not every frame', () => {
   assert.equal(entries(), 2);
 });
 
-test('all 27 catalog events occur naturally and the three new spectacles appear regularly in both modes', () => {
-  assert.equal(EVENTS.length, 27);
-  assert.equal(new Set(EVENTS.map(event => event.id)).size, 27);
+test('all 31 catalog events occur naturally and added spectacles appear regularly in both modes', () => {
+  assert.equal(EVENTS.length, 31);
+  assert.equal(new Set(EVENTS.map(event => event.id)).size, 31);
+  const added: EventId[] = ['R09', 'R10', 'S09', 'S10', 'S11', 'S12', 'S13'];
   for (const mode of ['normal', 'chaos'] as const) {
     const encountered = new Set<EventId>();
-    const novelCounts: Record<string, number> = { R09: 0, R10: 0, S09: 0 };
+    const novelCounts = Object.fromEntries(added.map(id => [id, 0]));
     let racesWithNew = 0;
     for (let seed = 0; seed < 64; seed++) {
       const { notifications } = collectRace(mode, seed);
       const raceIds = new Set(notifications.flatMap(event => event.eventId ? [event.eventId] : []));
       raceIds.forEach(id => encountered.add(id));
-      for (const id of ['R09', 'R10', 'S09'] as const) if (raceIds.has(id)) novelCounts[id]++;
-      if (['R09', 'R10', 'S09'].some(id => raceIds.has(id as EventId))) racesWithNew++;
+      for (const id of added) if (raceIds.has(id)) novelCounts[id]++;
+      if (added.some(id => raceIds.has(id))) racesWithNew++;
     }
     assert.deepEqual([...encountered].sort(), EVENTS.map(event => event.id).sort(), mode);
-    for (const count of Object.values(novelCounts)) assert.ok(count >= 12);
+    for (const [id, count] of Object.entries(novelCounts)) assert.ok(count >= (id.startsWith('R') ? 12 : 4), mode + ' ' + id);
     assert.ok(racesWithNew >= (mode === 'normal' ? 40 : 48));
   }
 });
@@ -504,7 +505,7 @@ test('normal accidents arrive in the opening seconds and remain lively, while ch
   let normalFirstLegendary = 0, chaosFirstLegendary = 0;
   let chaosStationary = 0;
   let normalLegendaryRaces = 0;
-  const negative = new Set<EventId>(['N01','N02','N03','N04','N05','N06','N07','N08','R03','R05','R06','R07','R09','R10','S05','S08','S09']);
+  const negative = new Set<EventId>(['N01','N02','N03','N04','N05','N06','N07','N08','R03','R05','R06','R07','R09','R10','S05','S08','S09','S10','S12','S13']);
   for (let seed = 0; seed < 32; seed++) {
     for (const mode of ['normal', 'chaos'] as const) {
       const { state, notifications, stationaryFraction } = collectRace(mode, seed);
@@ -751,5 +752,114 @@ test('all three new spectacles can affect CPUs without preventing an eventual CP
       assert.ok(Math.abs(baby.x) <= COURSE_HALF_WIDTH);
       assert.ok(Number.isFinite(baby.heading));
     }
+  }
+});
+
+const COSTUME_ACTS = [
+  { id: 'S10', pose: 1.6, run: 2, speed: 1.5 },
+  { id: 'S12', pose: 1.4, run: 2.4, speed: 2 },
+  { id: 'S13', pose: 1.6, run: 2.2, speed: 1.7 },
+] as const;
+
+for (const act of COSTUME_ACTS) {
+  test(`${act.id} holds its act, runs at its own speed, accepts guidance and returns to crawling`, () => {
+    const state = racing('normal', 3, { humanPlayers: 4 });
+    const baby = state.babies[0];
+    baby.x = 0; baby.z = 12;
+    moveRattle(state, 0, 4);
+    assert.equal(triggerEvent(state, act.id), true);
+    assert.equal(baby.state, 'awakening');
+    assert.equal(baby.awakeningPhase, 'pose');
+    assert.ok(Math.abs(baby.stateTime - act.pose - act.run) < 1e-8);
+    updateRace(state, act.pose - 0.1);
+    assert.equal(baby.z, 12);
+    assert.equal(baby.x, 0);
+    assert.equal(baby.awakeningPhase, 'pose');
+    ringRattle(state);
+    updateRace(state, 0.15);
+    assert.equal(baby.awakeningPhase, 'run');
+    const runStart = baby.z;
+    updateRace(state, 0.6);
+    const covered = runStart - baby.z;
+    assert.ok(covered > BASE_SPEED * act.speed * 0.6 * 0.95);
+    assert.ok(covered < BASE_SPEED * act.speed * 0.6 * 1.08);
+    moveRattle(state, 3, baby.z - 4);
+    ringRattle(state);
+    updateRace(state, 0.3);
+    assert.ok(baby.heading > 0.15);
+    assert.ok(baby.x > 0.03);
+    updateRace(state, act.run);
+    assert.equal(baby.eventId, null);
+    assert.equal(baby.awakeningPhase, undefined);
+    assert.notEqual(baby.state, 'awakening');
+    assert.equal(triggerEvent(state, act.id), false);
+  });
+
+  test(`${act.id} keeps its full run and limits its stationary goal act to 0.65 seconds`, () => {
+    const state = racing('normal', 3, { humanPlayers: 4 });
+    const baby = state.babies[0];
+    baby.x = 0; baby.z = GOAL_Z + 2;
+    moveRattle(state, 0, GOAL_Z - 2);
+    assert.equal(triggerEvent(state, act.id), true);
+    assert.ok(Math.abs(baby.stateTime - act.run - 0.65) < 1e-8);
+    updateRace(state, 0.6);
+    assert.equal(baby.awakeningPhase, 'pose');
+    assert.equal(baby.z, GOAL_Z + 2);
+    updateRace(state, 0.1);
+    assert.equal(baby.awakeningPhase, 'run');
+    assert.ok(baby.stateTime > act.run - 0.1);
+    assert.ok(baby.z < GOAL_Z + 2);
+  });
+
+  test(`${act.id} respects setback protection and skill mode, and a super preserves its act`, () => {
+    const protectedRace = racing('normal', 3, { humanPlayers: 4 });
+    triggerEvent(protectedRace, 'N03');
+    updateRace(protectedRace, 2);
+    assert.equal(triggerEvent(protectedRace, act.id), false);
+    protectedRace.time = 7.1;
+    assert.equal(triggerEvent(protectedRace, act.id), true);
+    const actTime = protectedRace.babies[0].stateTime;
+    assert.equal(useSuper(protectedRace), true);
+    assert.equal(protectedRace.babies[0].eventId, act.id);
+    assert.equal(protectedRace.babies[0].stateTime, actTime);
+    const poseStartZ = protectedRace.babies[0].z;
+    updateRace(protectedRace, 0.3);
+    assert.equal(protectedRace.babies[0].awakeningPhase, 'pose');
+    assert.equal(protectedRace.babies[0].z, poseStartZ);
+    assert.equal(triggerEvent(racing('skill'), act.id), false);
+  });
+}
+
+test('gymnastics starts moving immediately, cartwheels faster, steers and expires cleanly', () => {
+  const state = racing('normal', 3, { humanPlayers: 4 });
+  const baby = state.babies[0];
+  baby.x = 0; baby.z = 12;
+  moveRattle(state, 0, 4);
+  assert.equal(triggerEvent(state, 'S11'), true);
+  assert.equal(baby.awakeningPhase, 'run');
+  assert.equal(baby.stateTime, 3.6);
+  updateRace(state, 0.4);
+  assert.equal(baby.awakeningPhase, 'run');
+  assert.ok(12 - baby.z > BASE_SPEED * 1.9 * 0.4 * 0.95);
+  moveRattle(state, 3, baby.z - 4);
+  ringRattle(state);
+  updateRace(state, 0.4);
+  assert.ok(baby.x > 0.1);
+  updateRace(state, 3);
+  assert.equal(baby.eventId, null);
+  assert.equal(baby.awakeningPhase, undefined);
+  assert.notEqual(baby.state, 'awakening');
+  assert.equal(triggerEvent(racing('skill'), 'S11'), false);
+});
+
+test('new awakenings can affect CPUs and preserve an eventual CPU finish', () => {
+  for (const [index, id] of (['S10', 'S11', 'S12', 'S13'] as const).entries()) {
+    const state = racing('normal', 70 + index);
+    assert.equal(triggerEvent(state, id, 1), true);
+    assert.equal(state.babies[1].isCpu, true);
+    updateRace(state, TIME_LIMIT);
+    assert.equal(state.finishReason, 'goal');
+    assert.ok(state.winner !== null && state.babies[state.winner].isCpu);
+    assert.ok(state.time < TIME_LIMIT);
   }
 });
